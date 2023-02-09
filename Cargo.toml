@@ -9,6 +9,7 @@ edition = "2021"
 actix = "0.13.0"
 actix-web = "4.3.0"
 actix-web-actors = "4.2.0"
+block-id = "0.1.2"
 env_logger = "0.10.0"
 log = "0.4.17"
 serde = { version = "1.0.152", features = ["derive"] }
@@ -16,4 +17,4 @@ serde_json = "1.0.92"
 
 [[bin]]
 name = "rust-backend-test"
-path = "web-socket-server.rs"
+path = "src/web-socket-server.rs"

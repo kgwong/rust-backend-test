@@ -2,18 +2,37 @@ use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
+use game_manager::GameManager;
 use log::{info};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value};
 
+use crate::api::create_game::Request;
+
+mod api;
+mod game_manager;
+mod room_code_generator;
+
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Test{
-    message_name: String
+    message_name: String,
 }
 
 /// Define HTTP actor
-struct MyWs;
+struct MyWs{
+    gm: game_manager::GameManager,
+}
+
+impl MyWs{
+
+    pub fn new() -> Self {
+        MyWs { 
+            gm: game_manager::GameManager::new(),
+        }
+    }
+}
 
 impl Actor for MyWs {
     type Context = ws::WebsocketContext<Self>;
@@ -33,18 +52,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
                 };
                 match &json["message_name"] {
                     Value::String(message_name) => {
-                        info!("received valid message {}", message_name)
+                        info!("received valid message {}", message_name);
+                        match message_name.as_str() {
+
+                            "createGame" => {
+                                let req = serde_json::from_str(&text).unwrap_or(Request{host_name: "TODO".to_string()});
+                                let resp = self.gm.create_game(req);
+                                let js_str = serde_json::to_string(&resp).unwrap_or("{}".to_string());
+                                ctx.text(js_str);
+                            }
+
+                            _ => info!("{}", message_name)
+                        }
+
                     },
                     _ => info!("failure")
                 }
-
-                // let t = serde_json::from_str(&text);
-                // t.
-
-
-
-                // info!("{:?}", v);
-
 
                 let t: Test = match serde_json::from_str(&text)  {
                     Ok(test) => test,
@@ -55,14 +78,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
 
                 ctx.text(text)
             }
-            Ok(ws::Message::Binary(bin)) => ctx.binary(bin),
-            _ => (),
+            _ => {
+                // TODO 
+            },
         }
     }
 }
 
 async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
-    let resp = ws::start(MyWs {}, &req, stream);
+    let resp = ws::start(MyWs::new(), &req, stream);
     info!("{:?}", resp);
     resp
 }
