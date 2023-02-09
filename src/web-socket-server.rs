@@ -2,10 +2,8 @@ use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
-use game_manager::GameManager;
 use log::{info};
 
-use serde::{Deserialize, Serialize};
 use serde_json::{Value};
 
 use crate::api::create_game::Request;
@@ -13,12 +11,6 @@ use crate::api::create_game::Request;
 mod api;
 mod game_manager;
 mod room_code_generator;
-
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Test{
-    message_name: String,
-}
 
 /// Define HTTP actor
 struct MyWs{
@@ -43,7 +35,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         info!("Message Received: {:?}", msg);
         match msg {
-
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
                 let json: Value = match serde_json::from_str(&text) {
@@ -58,8 +49,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
                             "createGame" => {
                                 let req = serde_json::from_str(&text).unwrap_or(Request{host_name: "TODO".to_string()});
                                 let resp = self.gm.create_game(req);
-                                let js_str = serde_json::to_string(&resp).unwrap_or("{}".to_string());
-                                ctx.text(js_str);
+                                let js_resp = serde_json::to_string(&resp).expect("oops");
+                                ctx.text(js_resp);
                             }
 
                             _ => info!("{}", message_name)
@@ -68,15 +59,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
                     },
                     _ => info!("failure")
                 }
-
-                let t: Test = match serde_json::from_str(&text)  {
-                    Ok(test) => test,
-                    Err(error) => panic!("ERROR: {}", error)
-                };
-
-                info!("{:?}", t);
-
-                ctx.text(text)
             }
             _ => {
                 // TODO 

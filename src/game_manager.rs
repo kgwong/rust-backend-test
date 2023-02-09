@@ -1,4 +1,4 @@
-use crate::api::create_game::{Request, Response};
+use crate::api::create_game::{Request, Response, MessageName};
 use crate::room_code_generator::generate_room_code;
 
 struct GameState{
@@ -27,7 +27,7 @@ impl GameManager {
         //figure out the move stuff
         let rc2 = room_code.clone();
         self.games.insert(room_code, Game{});
-        Response{ status_code: 200, room_code: rc2}
+        Response{ message_name: MessageName::Foo, status_code: 200, room_code: rc2}
     }
 
     pub fn join_game() {
