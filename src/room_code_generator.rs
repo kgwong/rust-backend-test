@@ -3,17 +3,27 @@ use block_id::{Alphabet, BlockId};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 
-static mut count: u64 = 0;
+pub struct RoomCodeGenerator {
+    seed: u128,
+    count: usize,
+    length: u8
+}
 
-pub fn generate_room_code() -> String {
-    let seed = 0; // TODO: seed current time
-    let length = 4;
-    
-    let generator = BlockId::new(
-        Alphabet::lowercase_alpha(), seed, length);
-    
-    // TODO
-    unsafe { count += 1 };
+impl RoomCodeGenerator {
+    pub fn new(length: u8) -> Self {
+        RoomCodeGenerator{
+            seed: 0, // TODO: seed current time
+            count: 0,
+            length: length,
+        }
+    }
 
-    return generator.encode_string(unsafe { count } );
+    pub fn generate(&mut self) -> String {
+        let generator = BlockId::new(
+            Alphabet::lowercase_alpha(), self.seed, self.length);
+
+        self.count += 1;
+
+        return generator.encode_string(self.count as u64);
+    }
 }
