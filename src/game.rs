@@ -6,6 +6,7 @@ pub struct JoinGameError;
 
 const MAX_PLAYERS: usize = 8;
 
+#[derive(Debug, Clone)]
 enum GameState{
     WaitingForPlayers,
     DrawingPhase,
@@ -13,6 +14,7 @@ enum GameState{
     Results,
 }
 
+#[derive(Debug, Clone)]
 pub struct Game{
     state: GameState,
     host_player: String,

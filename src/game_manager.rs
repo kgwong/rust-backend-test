@@ -1,7 +1,10 @@
+use log::info;
+
 use crate::api::*;
 use crate::game::Game;
 use crate::room_code_generator::RoomCodeGenerator;
 
+#[derive(Clone)]
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
     games: std::collections::HashMap<String, Game>,
@@ -22,16 +25,20 @@ impl GameManager {
         //figure out the move stuff
         let rc2 = room_code.clone();
         self.games.insert(room_code, Game::new(req.host_name));
+        info!("Games: {:?}", self.games);
         create_game::Response{ message_name: create_game::MessageName::Foo, status_code: 200, room_code: rc2}
     }
 
     pub fn join_game(&mut self, req: join_game::Request) -> join_game::Response {
+        info!("Games: {:?}", self.games);
         let game = match self.games.get_mut(&req.room_code) {
             Some(g) => g,
-            None =>
+            None => {
+                info!("Room code does not exist: {}", &req.room_code);
                 return join_game::Response {
                     message_name: join_game::MessageName::Foo,
-                    response_type: join_game::ResponseType::ClientError},
+                    response_type: join_game::ResponseType::ClientError}
+            },
         };
 
         match game.add_player(req.player_name) {
@@ -40,10 +47,12 @@ impl GameManager {
                 message_name: join_game::MessageName::Foo,
                 response_type: join_game::ResponseType::Ok(
                     join_game::OkResponse{ test: 123} )},
-            Err(_) =>
+            Err(_) => {
+                info!("Room is full");
                 join_game::Response{
                     message_name: join_game::MessageName::Foo,
-                    response_type: join_game::ResponseType::ClientError },
+                    response_type: join_game::ResponseType::ClientError }
+                }
         }
     }
 
