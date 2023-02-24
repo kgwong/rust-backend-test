@@ -33,3 +33,15 @@ impl Handler<crate::api::create_game::Request> for GameServer {
         MessageResult(resp)
     }
 }
+
+impl Handler<crate::api::join_game::Request> for GameServer {
+    // type Result = std::result::Result<crate::api::create_game::Response, actix_web::Error>;
+    type Result = MessageResult<crate::api::join_game::Request>;
+
+    fn handle(&mut self, msg: crate::api::join_game::Request, _ctx: &mut Context<Self>) -> Self::Result {
+        info!("join game received");
+
+        let resp = self.gm.join_game(msg);
+        MessageResult(resp)
+    }
+}

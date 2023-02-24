@@ -1,6 +1,6 @@
 use log::info;
 
-use crate::api::*;
+use crate::api::{*, self};
 use crate::game::Game;
 use crate::room_code_generator::RoomCodeGenerator;
 
@@ -29,30 +29,27 @@ impl GameManager {
         create_game::Response{ message_name: create_game::MessageName::Foo, status_code: 200, room_code: rc2}
     }
 
-    pub fn join_game(&mut self, req: join_game::Request) -> join_game::Response {
+    pub fn join_game(&mut self, req: join_game::Request) -> api::response::GenericResponse<join_game::Response> {
         info!("Games: {:?}", self.games);
         let game = match self.games.get_mut(&req.room_code) {
             Some(g) => g,
             None => {
                 info!("Room code does not exist: {}", &req.room_code);
-                return join_game::Response {
-                    message_name: join_game::MessageName::Foo,
-                    response_type: join_game::ResponseType::ClientError}
+                return api::response::GenericResponse::ClientError("Room does not exist".to_string());
             },
         };
 
         match game.add_player(req.player_name) {
             Ok(_) =>
-                join_game::Response{
-                message_name: join_game::MessageName::Foo,
-                response_type: join_game::ResponseType::Ok(
-                    join_game::OkResponse{ test: 123} )},
+                api::response::GenericResponse::Ok(
+                    api::join_game::Response{
+                        test: 123,
+                    }
+                ),
             Err(_) => {
                 info!("Room is full");
-                join_game::Response{
-                    message_name: join_game::MessageName::Foo,
-                    response_type: join_game::ResponseType::ClientError }
-                }
+                api::response::GenericResponse::ClientError("Room is full".to_string())
+            }
         }
     }
 

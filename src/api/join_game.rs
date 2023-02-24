@@ -1,4 +1,7 @@
+use actix::prelude::*;
 use serde::{Deserialize, Serialize};
+use super::response::*;
+use super::response::TMessageName;
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -7,25 +10,19 @@ pub enum MessageName {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct OkResponse{
+pub struct Response{
     pub test: i64
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum ResponseType {
-    Ok(OkResponse),
-    ClientError,
-    ServerError,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "GenericResponse<Response>")]
 pub struct Request {
     pub room_code: String,
     pub player_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Response {
-    pub message_name: MessageName,
-    pub response_type: ResponseType,
+impl TMessageName for Response{
+    fn message_name() -> &'static str {
+        "joinGame"
+    }
 }
