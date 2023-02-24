@@ -1,3 +1,5 @@
+use actix::prelude::*;
+use actix_web::Error;
 use serde::{Deserialize, Serialize};
 
 
@@ -7,7 +9,8 @@ pub enum MessageName {
     #[serde(rename = "createGame")] Foo
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "Response")]
 pub struct Request {
     pub host_name: String,
 }
