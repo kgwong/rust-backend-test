@@ -6,13 +6,6 @@ pub trait TMessageName{
     fn message_name() -> &'static str;
 }
 
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TResponse {
-    //pub message_name: MessageName,
-    //pub response_type: ResponseType,
-}
-
 #[derive(Deserialize, Debug)]
 pub enum GenericResponse<T: TMessageName> {
     Ok(T),

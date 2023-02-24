@@ -20,9 +20,10 @@ pub async fn ws_route(
     info!("Connection from: {}", req.peer_addr().expect("oops missing addr?"));
     //info!("Headers: {:?}", req.headers());
 
-    let session = client_session::ClientSession {
-        server: server.get_ref().clone()
-    };
+    let session = client_session::ClientSession::new(
+        server.get_ref().clone(),
+        req.peer_addr().expect("oops")
+    );
     let resp = ws::start(session, &req, stream);
     info!("index_resp: {:?}", resp);
     resp

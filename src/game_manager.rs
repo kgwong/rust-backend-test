@@ -57,8 +57,8 @@ impl GameManager {
 
     }
 
-    pub fn start_game() {
-
+    pub fn start_game(&mut self, req: start_game::Request) -> api::response::GenericResponse<start_game::Response> {
+        api::response::GenericResponse::ServerError("Not Implemented".to_string())
     }
 
     pub fn submit_drawing() {

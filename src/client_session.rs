@@ -1,18 +1,39 @@
-use std::sync::{Mutex, Arc};
-use actix::{Actor, StreamHandler, Addr, WrapFuture, ActorFutureExt, fut, ContextFutureSpawner};
+use std::{net};
 
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix::{Actor, StreamHandler, Addr, WrapFuture, ActorFutureExt, fut, ContextFutureSpawner, Message};
 use actix_web_actors::ws;
 
 use log::{info, error};
 
 use serde_json::{Value};
 
-use crate::server;
+use crate::server::{self, ClientRequestWrapper};
 
-#[derive(Clone)]
+use uuid::Uuid;
+
 pub struct ClientSession{
-    pub server: Addr<server::GameServer>
+    uuid: Uuid,
+    server: Addr<server::GameServer>,
+    peer_addr: net::SocketAddr,
+
+}
+
+impl ClientSession {
+    pub fn new(server: Addr<server::GameServer>, peer_addr: net::SocketAddr) -> Self {
+        ClientSession {
+            uuid: Uuid::new_v4(),
+            server,
+            peer_addr,
+        }
+    }
+
+    fn wrap_request<T: Message>(&self, req: T) -> server::ClientRequestWrapper<T> {
+        ClientRequestWrapper{
+            client_uuid: self.uuid,
+            peer_addr: self.peer_addr,
+            req: req,
+        }
+    }
 }
 
 impl Actor for ClientSession {
@@ -42,7 +63,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                     Value::String(message_name) => {
                         // let mut shared_state = self.shared_state.lock().unwrap();
                         match message_name.as_str() {
-                            "createGame"  =>  {
+                            "create_game"  =>  {
                                 let req: crate::api::create_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
                                     .send(req)
@@ -54,10 +75,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                                     });
                                 l.wait(ctx);
                             }
-                            "joinGame" => {
+                            "join_game" => {
                                 let req: crate::api::join_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
                                     .send(req)
+                                    .into_actor(self)
+                                    .then(|res, _, ctx|{
+                                        let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
+                                        ctx.text(js_resp);
+                                        fut::ready(())
+                                    });
+                                l.wait(ctx);
+                            }
+                            "start_game" => {
+                                let req: crate::api::start_game::Request = serde_json::from_str(&text).expect("failed to parse");
+                                let l = self.server
+                                    .send(self.wrap_request(req))
                                     .into_actor(self)
                                     .then(|res, _, ctx|{
                                         let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
