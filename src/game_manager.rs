@@ -1,64 +1,63 @@
+use std::rc::Rc;
+
 use log::info;
+use uuid::Uuid;
 
 use crate::api::{*, self};
-use crate::game::Game;
+use crate::game::{Game, JoinGameError};
+use crate::player::Player;
 use crate::room_code_generator::RoomCodeGenerator;
 
-#[derive(Clone)]
+#[derive(Debug)]
+pub struct CreateGameError;
+
+#[derive(Debug)]
+pub struct StartGameError;
+
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
-    games: std::collections::HashMap<String, Game>,
+    games_by_room_code: std::collections::HashMap<String, Game>,
+    games_by_client_id: std::collections::HashMap<Uuid, String>,
 }
 
 impl GameManager {
-
     pub fn new() -> Self {
         GameManager {
             room_code_generator: RoomCodeGenerator::new(4),
-            games: std::collections::HashMap::new(),
+            games_by_room_code: std::collections::HashMap::new(),
+            games_by_client_id: std::collections::HashMap::new(),
         }
     }
 
-    pub fn create_game(&mut self, req: create_game::Request) -> create_game::Response {
+    pub fn get_game_mut(&mut self, client_id: Uuid) -> Option<&mut Game>{
+        let rc = self.games_by_client_id.get(&client_id)?;
+        self.games_by_room_code.get_mut(rc)
+    }
+
+    pub fn create_game(&mut self, player: Rc<crate::player::Player>) -> Result<String, CreateGameError> {
         let room_code = self.room_code_generator.generate();
 
-        //figure out the move stuff
-        let rc2 = room_code.clone();
-        self.games.insert(room_code, Game::new(req.host_name));
-        info!("Games: {:?}", self.games);
-        create_game::Response{ message_name: create_game::MessageName::Foo, status_code: 200, room_code: rc2}
+        //let game = Rc::new(Game::new(player.clone()));
+
+        self.games_by_room_code.insert(room_code.clone(), Game::new(player.clone()));
+        self.games_by_client_id.insert(player.client_uuid, room_code.clone());
+        info!("Games: {:?}", self.games_by_room_code);
+        Ok(room_code)
     }
 
-    pub fn join_game(&mut self, req: join_game::Request) -> api::response::GenericResponse<join_game::Response> {
-        info!("Games: {:?}", self.games);
-        let game = match self.games.get_mut(&req.room_code) {
-            Some(g) => g,
-            None => {
-                info!("Room code does not exist: {}", &req.room_code);
-                return api::response::GenericResponse::ClientError("Room does not exist".to_string());
-            },
-        };
-
-        match game.add_player(req.player_name) {
-            Ok(_) =>
-                api::response::GenericResponse::Ok(
-                    api::join_game::Response{
-                        test: 123,
-                    }
-                ),
-            Err(_) => {
-                info!("Room is full");
-                api::response::GenericResponse::ClientError("Room is full".to_string())
-            }
-        }
+    pub fn join_game(&mut self, player: Rc<crate::player::Player>, room_code: &str) -> Result<(), JoinGameError> {
+        info!("Games: {:?}", self.games_by_room_code);
+        let game = self.games_by_room_code.get_mut(room_code).ok_or_else(|| JoinGameError)?;
+        game.add_player(player)
     }
 
     pub fn ready_player() {
 
     }
 
-    pub fn start_game(&mut self, req: start_game::Request) -> api::response::GenericResponse<start_game::Response> {
-        api::response::GenericResponse::ServerError("Not Implemented".to_string())
+    pub fn start_game(&mut self, client_id: Uuid) -> Result<(), StartGameError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| StartGameError)?;
+        game.start_game(client_id).map_err(|_| StartGameError)
     }
 
     pub fn submit_drawing() {

@@ -1,12 +1,21 @@
+use std::rc::Rc;
+
 use log::info;
+use uuid::Uuid;
+
+use crate::player::Player;
+
 
 
 #[derive(Debug)]
 pub struct JoinGameError;
 
+#[derive(Debug)]
+pub struct StartGameError;
+
 const MAX_PLAYERS: usize = 8;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum GameState{
     WaitingForPlayers,
     DrawingPhase,
@@ -14,16 +23,16 @@ enum GameState{
     Results,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Game{
     state: GameState,
-    host_player: String,
-    players: std::vec::Vec<String>,
+    host_player: Rc<Player>,
+    players: std::vec::Vec<Rc<Player>>,
 }
 
 impl Game {
 
-    pub fn new(host_player: String) -> Self {
+    pub fn new(host_player: Rc<Player>) -> Self {
         Game {
             state: GameState::WaitingForPlayers,
             players: std::vec![host_player.clone()],
@@ -31,7 +40,7 @@ impl Game {
         }
     }
 
-    pub fn add_player(&mut self, player: String) -> std::result::Result<(), JoinGameError> {
+    pub fn add_player(&mut self, player: Rc<Player>) -> Result<(), JoinGameError> {
         if self.players.len() == MAX_PLAYERS {
             return Err(JoinGameError);
         }
@@ -39,5 +48,18 @@ impl Game {
         self.players.push(player);
         info!("CurrentPlayers: {:?}", self.players);
         return Ok(());
+    }
+
+    pub fn start_game(&mut self, client_id: Uuid) -> Result<(), StartGameError> {
+        if self.host_player.client_uuid == client_id {
+            if self.state != GameState::WaitingForPlayers {
+                return Err(StartGameError)
+            }
+            info!("Host is starting the game");
+            self.state = GameState::DrawingPhase;
+            Ok(())
+        } else {
+            Err(StartGameError)
+        }
     }
 }

@@ -5,7 +5,6 @@ use super::response::TMessageName;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Response{
-    pub test: i64
 }
 
 #[derive(Serialize, Deserialize, Debug, Message)]

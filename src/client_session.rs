@@ -66,7 +66,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                             "create_game"  =>  {
                                 let req: crate::api::create_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
-                                    .send(req)
+                                    .send(self.wrap_request(req))
                                     .into_actor(self)
                                     .then(|res, _, ctx|{
                                         let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
@@ -78,7 +78,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                             "join_game" => {
                                 let req: crate::api::join_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
-                                    .send(req)
+                                    .send(self.wrap_request(req))
                                     .into_actor(self)
                                     .then(|res, _, ctx|{
                                         let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");

@@ -8,6 +8,7 @@ mod api;
 mod game_manager;
 mod room_code_generator;
 mod game;
+mod player;
 mod client_session;
 mod server;
 

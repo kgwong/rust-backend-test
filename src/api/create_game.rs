@@ -1,25 +1,23 @@
 use actix::prelude::*;
 use serde::{Deserialize, Serialize};
+use super::response::*;
+use super::response::TMessageName;
 
-
-// https://github.com/serde-rs/serde/issues/760#issuecomment-499570311
 #[derive(Serialize, Deserialize, Debug)]
-pub enum MessageName {
-    #[serde(rename = "createGame")] Foo
+pub struct Response {
+    //TODO replace with game state
+    pub room_code: String
 }
 
+
 #[derive(Serialize, Deserialize, Debug, Message)]
-#[rtype(result = "Response")]
+#[rtype(result = "GenericResponse<Response>")]
 pub struct Request {
     pub host_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Response {
-    pub message_name: MessageName,
-
-    pub status_code: i32,
-
-    //TODO replace with game state
-    pub room_code: String
+impl TMessageName for Response{
+    fn message_name() -> &'static str {
+        "create_game"
+    }
 }
