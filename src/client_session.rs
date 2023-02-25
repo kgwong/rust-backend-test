@@ -129,6 +129,6 @@ impl Handler<crate::api::game_update::GameUpdate> for ClientSession {
         msg: crate::api::game_update::GameUpdate,
         ctx: &mut Self::Context)
     -> Self::Result {
-        ctx.text(msg.test);
+        ctx.text(serde_json::to_string(&msg).expect("oops"));
     }
 }

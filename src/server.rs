@@ -1,11 +1,9 @@
 use actix::prelude::*;
-use actix_web_actors::ws;
-use serde::{Deserialize, Serialize};
 use std::{net, rc::Rc};
 
 use log::info;
 
-use crate::{game_manager, player::Player, client_session::ClientSession};
+use crate::{game_manager, client_session::ClientSession};
 
 use uuid::Uuid;
 
@@ -16,19 +14,6 @@ pub struct ClientRequestWrapper<T: Message>{
     pub req: T,
     pub client_addr: Addr<ClientSession>
 }
-
-
-/*impl<T: Message + std::fmt::Debug> std::fmt::Debug for ClientRequestWrapper<T> {
-     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ClientRequestWrapper")
-            .field("client_uuid", &self.client_uuid)
-            .field("peer_addr", &self.peer_addr)
-            .field("req", &self.req)
-            .finish()
-    }
-}*/
-
-
 
 impl<T: Message> Message for ClientRequestWrapper<T> {
     type Result = T::Result;
@@ -67,12 +52,10 @@ impl Handler<ClientRequestWrapper<crate::api::create_game::Request>> for GameSer
                 name: msg.req.host_name
             }));
         match resp {
-            Ok(room_code) =>
+            Ok(_) =>
                 MessageResult(
                     crate::api::response::GenericResponse::Ok(
-                        crate::api::create_game::Response{
-                            room_code: room_code,
-                        }
+                        crate::api::create_game::Response{}
                     )
                 ),
             Err(e) =>

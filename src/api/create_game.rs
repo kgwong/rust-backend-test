@@ -5,8 +5,6 @@ use super::response::TMessageName;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Response {
-    //TODO replace with game state
-    pub room_code: String
 }
 
 

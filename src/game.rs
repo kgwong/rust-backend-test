@@ -1,9 +1,10 @@
 use std::rc::Rc;
 
 use log::info;
+use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-use crate::player::Player;
+use crate::{player::Player, api::game_update::GameUpdate};
 
 
 
@@ -14,9 +15,10 @@ pub struct JoinGameError;
 pub struct StartGameError;
 
 const MAX_PLAYERS: usize = 8;
+const MAX_ROUNDS: usize = 5;
 
-#[derive(Debug, Clone, PartialEq)]
-enum GameState{
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GameState{
     WaitingForPlayers,
     DrawingPhase,
     VotingPlase,
@@ -25,18 +27,24 @@ enum GameState{
 
 #[derive(Debug)]
 pub struct Game{
+    room_code: String,
     state: GameState,
     host_player: Rc<Player>,
     players: std::vec::Vec<Rc<Player>>,
+    round: usize,
+    max_rounds: usize,
 }
 
 impl Game {
 
-    pub fn new(host_player: Rc<Player>) -> Self {
+    pub fn new(room_code: String, host_player: Rc<Player>) -> Self {
         Game {
+            room_code: room_code,
             state: GameState::WaitingForPlayers,
-            players: std::vec![host_player.clone()],
-            host_player: host_player,
+            host_player: host_player.clone(),
+            players: std::vec![host_player],
+            round: 0,
+            max_rounds: MAX_ROUNDS,
         }
     }
 
@@ -45,7 +53,14 @@ impl Game {
             return Err(JoinGameError);
         }
 
-        self.players.push(player);
+        let resolved_player = Rc::new(Player{
+            client_uuid: player.client_uuid,
+            peer_addr: player.peer_addr,
+            client_addr: player.client_addr.clone(),
+            name: self.resolve_name(&player),
+        });
+
+        self.players.push(resolved_player);
         info!("CurrentPlayers: {:?}", self.players);
         self.broadcast_update();
         return Ok(());
@@ -58,6 +73,7 @@ impl Game {
             }
             info!("Host is starting the game");
             self.state = GameState::DrawingPhase;
+            self.broadcast_update();
             Ok(())
         } else {
             Err(StartGameError)
@@ -66,11 +82,34 @@ impl Game {
 
     pub fn broadcast_update(&self) {
         info!("Broadcasting update to all players");
-        for x in &self.players {
-            x.client_addr.do_send(
-                crate::api::game_update::GameUpdate{
-                    test: "test".to_string()
-                });
+        for p in &self.players {
+            self.send_game_view_to_player(p);
         }
+    }
+
+    fn current_game_view(&self) -> GameUpdate {
+        GameUpdate {
+            room_code: self.room_code.clone(),
+            state: self.state.clone(),
+            round: self.round,
+            players: self.players.iter().map(|p| p.name.clone()).collect()
+        }
+    }
+
+    fn send_game_view_to_player(&self, player: &Player) {
+        player.client_addr.do_send(self.current_game_view());
+    }
+
+    /**
+     *  Returns a new name in the form of `name(1)` if it's a duplicate of an existing name
+     */
+    fn resolve_name(&self, player: &Player) -> String {
+        let mut proposed_name = player.name.clone();
+        let mut count = 1;
+        while self.players.iter().any(|p| p.name == proposed_name) {
+            proposed_name = format!("{}({})", player.name, count);
+            count += 1;
+        }
+        proposed_name
     }
 }

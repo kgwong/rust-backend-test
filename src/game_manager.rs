@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use log::info;
+use log::{info, trace};
 use uuid::Uuid;
 
 use crate::api::{*, self};
@@ -35,19 +35,27 @@ impl GameManager {
     }
 
     pub fn create_game(&mut self, player: Rc<crate::player::Player>) -> Result<String, CreateGameError> {
+        if self.is_already_in_a_game(&player.client_uuid) {
+            return Err(CreateGameError{});
+        }
         let room_code = self.room_code_generator.generate();
 
-        //let game = Rc::new(Game::new(player.clone()));
-
-        self.games_by_room_code.insert(room_code.clone(), Game::new(player.clone()));
+        let game = Game::new(room_code.clone(), player.clone());
+        game.broadcast_update();
+        self.games_by_room_code.insert(room_code.clone(), game);
         self.games_by_client_id.insert(player.client_uuid, room_code.clone());
-        info!("Games: {:?}", self.games_by_room_code);
+        trace!("Games: {:?}", self.games_by_room_code);
         Ok(room_code)
     }
 
     pub fn join_game(&mut self, player: Rc<crate::player::Player>, room_code: &str) -> Result<(), JoinGameError> {
-        info!("Games: {:?}", self.games_by_room_code);
+        if self.is_already_in_a_game(&player.client_uuid) {
+            return Err(JoinGameError{});
+        }
+
+        trace!("Games: {:?}", self.games_by_room_code);
         let game = self.games_by_room_code.get_mut(room_code).ok_or_else(|| JoinGameError)?;
+        self.games_by_client_id.insert(player.client_uuid, room_code.to_string());
         game.add_player(player)
     }
 
@@ -68,5 +76,7 @@ impl GameManager {
 
     }
 
-
+    fn is_already_in_a_game(&self, client_id: &Uuid) -> bool {
+        self.games_by_client_id.contains_key(client_id)
+    }
 }
