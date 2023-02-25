@@ -1,6 +1,6 @@
 use std::{net};
 
-use actix::{Actor, StreamHandler, Addr, WrapFuture, ActorFutureExt, fut, ContextFutureSpawner, Message};
+use actix::{Actor, StreamHandler, Addr, WrapFuture, ActorFutureExt, fut, ContextFutureSpawner, Message, AsyncContext, Handler, Context};
 use actix_web_actors::ws;
 
 use log::{info, error};
@@ -27,11 +27,12 @@ impl ClientSession {
         }
     }
 
-    fn wrap_request<T: Message>(&self, req: T) -> server::ClientRequestWrapper<T> {
+    fn wrap_request<T: Message>(&self, req: T, ctx: &ws::WebsocketContext<Self>) -> server::ClientRequestWrapper<T> {
         ClientRequestWrapper{
             client_uuid: self.uuid,
             peer_addr: self.peer_addr,
             req: req,
+            client_addr: ctx.address(),
         }
     }
 }
@@ -66,7 +67,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                             "create_game"  =>  {
                                 let req: crate::api::create_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
-                                    .send(self.wrap_request(req))
+                                    .send(self.wrap_request(req, ctx))
                                     .into_actor(self)
                                     .then(|res, _, ctx|{
                                         let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
@@ -78,7 +79,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                             "join_game" => {
                                 let req: crate::api::join_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
-                                    .send(self.wrap_request(req))
+                                    .send(self.wrap_request(req, ctx))
                                     .into_actor(self)
                                     .then(|res, _, ctx|{
                                         let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
@@ -90,7 +91,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                             "start_game" => {
                                 let req: crate::api::start_game::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
-                                    .send(self.wrap_request(req))
+                                    .send(self.wrap_request(req, ctx))
                                     .into_actor(self)
                                     .then(|res, _, ctx|{
                                         let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
@@ -112,8 +113,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                 ctx.text("Internal Server Error");
             },
             _ => {
-                //TODO
+                //TODO\
             }
         }
+    }
+}
+
+
+
+impl Handler<crate::api::game_update::GameUpdate> for ClientSession {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: crate::api::game_update::GameUpdate,
+        ctx: &mut Self::Context)
+    -> Self::Result {
+        ctx.text(msg.test);
     }
 }

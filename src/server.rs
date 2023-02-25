@@ -1,10 +1,11 @@
 use actix::prelude::*;
+use actix_web_actors::ws;
 use serde::{Deserialize, Serialize};
 use std::{net, rc::Rc};
 
 use log::info;
 
-use crate::{game_manager, player::Player};
+use crate::{game_manager, player::Player, client_session::ClientSession};
 
 use uuid::Uuid;
 
@@ -13,7 +14,21 @@ pub struct ClientRequestWrapper<T: Message>{
     pub client_uuid: Uuid,
     pub peer_addr: net::SocketAddr,
     pub req: T,
+    pub client_addr: Addr<ClientSession>
 }
+
+
+/*impl<T: Message + std::fmt::Debug> std::fmt::Debug for ClientRequestWrapper<T> {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClientRequestWrapper")
+            .field("client_uuid", &self.client_uuid)
+            .field("peer_addr", &self.peer_addr)
+            .field("req", &self.req)
+            .finish()
+    }
+}*/
+
+
 
 impl<T: Message> Message for ClientRequestWrapper<T> {
     type Result = T::Result;
@@ -48,6 +63,7 @@ impl Handler<ClientRequestWrapper<crate::api::create_game::Request>> for GameSer
             Rc::new(crate::player::Player{
                 client_uuid: msg.client_uuid,
                 peer_addr: msg.peer_addr,
+                client_addr: msg.client_addr,
                 name: msg.req.host_name
             }));
         match resp {
@@ -78,6 +94,7 @@ impl Handler<ClientRequestWrapper<crate::api::join_game::Request>> for GameServe
         let player = Rc::new(crate::player::Player{
             client_uuid: msg.client_uuid,
             peer_addr: msg.peer_addr,
+            client_addr: msg.client_addr,
             name: msg.req.player_name
         });
         match self.gm.join_game(player, &msg.req.room_code) {

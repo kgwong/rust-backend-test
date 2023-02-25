@@ -47,6 +47,7 @@ impl Game {
 
         self.players.push(player);
         info!("CurrentPlayers: {:?}", self.players);
+        self.broadcast_update();
         return Ok(());
     }
 
@@ -60,6 +61,16 @@ impl Game {
             Ok(())
         } else {
             Err(StartGameError)
+        }
+    }
+
+    pub fn broadcast_update(&self) {
+        info!("Broadcasting update to all players");
+        for x in &self.players {
+            x.client_addr.do_send(
+                crate::api::game_update::GameUpdate{
+                    test: "test".to_string()
+                });
         }
     }
 }
