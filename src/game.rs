@@ -34,8 +34,10 @@ pub struct JoinGameError;
 #[derive(Debug)]
 pub struct StartGameError;
 
+const MIN_PLAYERS: usize = 2;
 const MAX_PLAYERS: usize = 8;
 const MAX_ROUNDS: usize = 5;
+
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GameState{
@@ -88,7 +90,10 @@ impl Game {
     pub fn start_game(&mut self, client_id: Uuid) -> Result<(), StartGameError> {
         if self.players[0].client.client_uuid == client_id {
             if self.state != GameState::WaitingForPlayers {
-                return Err(StartGameError)
+                return Err(StartGameError);
+            }
+            if self.players.len() < MIN_PLAYERS {
+                return Err(StartGameError);
             }
             info!("Host is starting the game");
             self.state = GameState::DrawingPhase;
