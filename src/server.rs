@@ -45,7 +45,7 @@ impl Handler<ClientRequestWrapper<crate::api::create_game::Request>> for GameSer
         _ctx: &mut Context<Self>)
     -> Self::Result {
         let resp = self.gm.create_game(
-            Rc::new(crate::player::Player{
+            Rc::new(crate::player::PlayerClient{
                 client_uuid: msg.client_uuid,
                 peer_addr: msg.peer_addr,
                 client_addr: msg.client_addr,
@@ -74,7 +74,7 @@ impl Handler<ClientRequestWrapper<crate::api::join_game::Request>> for GameServe
         msg: ClientRequestWrapper<crate::api::join_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        let player = Rc::new(crate::player::Player{
+        let player = Rc::new(crate::player::PlayerClient{
             client_uuid: msg.client_uuid,
             peer_addr: msg.peer_addr,
             client_addr: msg.client_addr,
@@ -103,6 +103,27 @@ impl Handler<ClientRequestWrapper<crate::api::start_game::Request>> for GameServ
             Ok(_) =>
                 MessageResult(
                     crate::api::response::GenericResponse::Ok(crate::api::start_game::Response{})),
+            Err(_) =>
+                MessageResult(
+                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+        }
+    }
+}
+
+
+
+impl Handler<ClientRequestWrapper<crate::api::set_player_ready::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<crate::api::set_player_ready::Request>>;
+
+    fn handle(
+        &mut self,
+        msg: ClientRequestWrapper<crate::api::set_player_ready::Request>,
+        _ctx: &mut Context<Self>)
+    -> Self::Result {
+        match self.gm.set_player_ready(msg.client_uuid, msg.req.ready_state) {
+            Ok(_) =>
+                MessageResult(
+                    crate::api::response::GenericResponse::Ok(crate::api::set_player_ready::Response{})),
             Err(_) =>
                 MessageResult(
                     crate::api::response::GenericResponse::ClientError("failed".to_string())),

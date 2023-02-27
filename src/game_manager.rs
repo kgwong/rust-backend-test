@@ -1,11 +1,12 @@
 use std::rc::Rc;
 
 use log::{info, trace};
+use serde_json::de::Read;
 use uuid::Uuid;
 
 use crate::api::{*, self};
 use crate::game::{Game, JoinGameError};
-use crate::player::Player;
+use crate::player::PlayerClient;
 use crate::room_code_generator::RoomCodeGenerator;
 
 #[derive(Debug)]
@@ -13,6 +14,9 @@ pub struct CreateGameError;
 
 #[derive(Debug)]
 pub struct StartGameError;
+
+#[derive(Debug)]
+pub struct ReadyPlayerError;
 
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
@@ -34,7 +38,7 @@ impl GameManager {
         self.games_by_room_code.get_mut(rc)
     }
 
-    pub fn create_game(&mut self, player: Rc<crate::player::Player>) -> Result<String, CreateGameError> {
+    pub fn create_game(&mut self, player: Rc<crate::player::PlayerClient>) -> Result<String, CreateGameError> {
         if self.is_already_in_a_game(&player.client_uuid) {
             return Err(CreateGameError{});
         }
@@ -48,7 +52,7 @@ impl GameManager {
         Ok(room_code)
     }
 
-    pub fn join_game(&mut self, player: Rc<crate::player::Player>, room_code: &str) -> Result<(), JoinGameError> {
+    pub fn join_game(&mut self, player: Rc<crate::player::PlayerClient>, room_code: &str) -> Result<(), JoinGameError> {
         if self.is_already_in_a_game(&player.client_uuid) {
             return Err(JoinGameError{});
         }
@@ -59,7 +63,9 @@ impl GameManager {
         game.add_player(player)
     }
 
-    pub fn ready_player() {
+    pub fn set_player_ready(&mut self, client_id: Uuid, ready_state: bool) -> Result<(), ReadyPlayerError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| ReadyPlayerError)?;
+        game.set_player_ready(client_id, ready_state).map_err(|_| ReadyPlayerError)
 
     }
 

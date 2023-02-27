@@ -100,6 +100,18 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                                     });
                                 l.wait(ctx);
                             }
+                            "set_player_ready" => {
+                                let req: crate::api::set_player_ready::Request = serde_json::from_str(&text).expect("failed to parse");
+                                let l = self.server
+                                    .send(self.wrap_request(req, ctx))
+                                    .into_actor(self)
+                                    .then(|res, _, ctx|{
+                                        let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
+                                        ctx.text(js_resp);
+                                        fut::ready(())
+                                    });
+                                l.wait(ctx);
+                            }
 
                             _ => info!("Unknown message {}", message_name)
                         }
