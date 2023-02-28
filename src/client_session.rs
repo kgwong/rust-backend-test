@@ -112,6 +112,30 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                                     });
                                 l.wait(ctx);
                             }
+                            "submit_drawing" => {
+                                let req: crate::api::submit_drawing::Request = serde_json::from_str(&text).expect("failed to parse");
+                                let l = self.server
+                                    .send(self.wrap_request(req, ctx))
+                                    .into_actor(self)
+                                    .then(|res, _, ctx|{
+                                        let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
+                                        ctx.text(js_resp);
+                                        fut::ready(())
+                                    });
+                                l.wait(ctx);
+                            }
+                            "vote" => {
+                                let req: crate::api::vote::Request = serde_json::from_str(&text).expect("failed to parse");
+                                let l = self.server
+                                    .send(self.wrap_request(req, ctx))
+                                    .into_actor(self)
+                                    .then(|res, _, ctx|{
+                                        let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
+                                        ctx.text(js_resp);
+                                        fut::ready(())
+                                    });
+                                l.wait(ctx);
+                            }
 
                             _ => info!("Unknown message {}", message_name)
                         }

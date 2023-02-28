@@ -130,3 +130,42 @@ impl Handler<ClientRequestWrapper<crate::api::set_player_ready::Request>> for Ga
         }
     }
 }
+
+
+impl Handler<ClientRequestWrapper<crate::api::submit_drawing::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<crate::api::submit_drawing::Request>>;
+
+    fn handle(
+        &mut self,
+        msg: ClientRequestWrapper<crate::api::submit_drawing::Request>,
+        _ctx: &mut Context<Self>)
+    -> Self::Result {
+        match self.gm.submit_drawing(msg.client_uuid, msg.req.drawing, msg.req.round) {
+            Ok(_) =>
+                MessageResult(
+                    crate::api::response::GenericResponse::Ok(crate::api::submit_drawing::Response{})),
+            Err(_) =>
+                MessageResult(
+                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+        }
+    }
+}
+
+impl Handler<ClientRequestWrapper<crate::api::vote::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<crate::api::vote::Request>>;
+
+    fn handle(
+        &mut self,
+        msg: ClientRequestWrapper<crate::api::vote::Request>,
+        _ctx: &mut Context<Self>)
+    -> Self::Result {
+        match self.gm.vote(msg.client_uuid, msg.req.votes) {
+            Ok(_) =>
+                MessageResult(
+                    crate::api::response::GenericResponse::Ok(crate::api::vote::Response{})),
+            Err(_) =>
+                MessageResult(
+                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+        }
+    }
+}

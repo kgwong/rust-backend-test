@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use log::{info, trace};
@@ -5,6 +6,7 @@ use serde_json::de::Read;
 use uuid::Uuid;
 
 use crate::api::{*, self};
+use crate::drawing::Drawing;
 use crate::game::{Game, JoinGameError};
 use crate::player::PlayerClient;
 use crate::room_code_generator::RoomCodeGenerator;
@@ -17,6 +19,12 @@ pub struct StartGameError;
 
 #[derive(Debug)]
 pub struct ReadyPlayerError;
+
+#[derive(Debug)]
+pub struct SubmitDrawingError;
+
+#[derive(Debug)]
+pub struct VoteError;
 
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
@@ -74,12 +82,14 @@ impl GameManager {
         game.start_game(client_id).map_err(|_| StartGameError)
     }
 
-    pub fn submit_drawing() {
-
+    pub fn submit_drawing(&mut self, client_id: Uuid, drawing: Drawing, round: usize) -> Result<(), SubmitDrawingError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| SubmitDrawingError)?;
+        Err(SubmitDrawingError{})
     }
 
-    pub fn vote() {
-
+    pub fn vote(&mut self, client_id: Uuid, votes: HashMap<String, i32>) -> Result<(), VoteError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| VoteError)?;
+        Err(VoteError{})
     }
 
     fn is_already_in_a_game(&self, client_id: &Uuid) -> bool {

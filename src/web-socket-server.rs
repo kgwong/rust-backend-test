@@ -11,6 +11,7 @@ mod game;
 mod player;
 mod client_session;
 mod server;
+mod drawing;
 
 
 pub async fn ws_route(
