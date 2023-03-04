@@ -18,4 +18,4 @@ uuid = { version = "1.3.0", features = ["v4"]}
 
 [[bin]]
 name = "rust-backend-test"
-path = "src/web-socket-server.rs"
+path = "src/main.rs"

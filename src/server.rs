@@ -3,7 +3,7 @@ use std::{net, rc::Rc};
 
 use log::info;
 
-use crate::{game_manager, client_session::ClientSession};
+use crate::{api::*, game_manager, client_session::ClientSession};
 
 use uuid::Uuid;
 
@@ -36,12 +36,12 @@ impl Actor for GameServer {
     type Context = Context<Self>;
 }
 
-impl Handler<ClientRequestWrapper<crate::api::create_game::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<crate::api::create_game::Request>>;
+impl Handler<ClientRequestWrapper<create_game::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<create_game::Request>>;
 
     fn handle(
         &mut self,
-        msg: ClientRequestWrapper<crate::api::create_game::Request>,
+        msg: ClientRequestWrapper<create_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         let resp = self.gm.create_game(
@@ -54,24 +54,24 @@ impl Handler<ClientRequestWrapper<crate::api::create_game::Request>> for GameSer
         match resp {
             Ok(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::Ok(
-                        crate::api::create_game::Response{}
+                    response::GenericResponse::Ok(
+                        create_game::Response{}
                     )
                 ),
             Err(e) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::ServerError("create_game error TODO".to_string())
+                    response::GenericResponse::ServerError("create_game error TODO".to_string())
                 ),
         }
     }
 }
 
-impl Handler<ClientRequestWrapper<crate::api::join_game::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<crate::api::join_game::Request>>;
+impl Handler<ClientRequestWrapper<join_game::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<join_game::Request>>;
 
     fn handle(&
         mut self,
-        msg: ClientRequestWrapper<crate::api::join_game::Request>,
+        msg: ClientRequestWrapper<join_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         let player = Rc::new(crate::player::PlayerClient{
@@ -83,89 +83,87 @@ impl Handler<ClientRequestWrapper<crate::api::join_game::Request>> for GameServe
         match self.gm.join_game(player, &msg.req.room_code) {
             Ok(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::Ok(crate::api::join_game::Response{})),
+                    response::GenericResponse::Ok(join_game::Response{})),
             Err(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+                    response::GenericResponse::ClientError("failed".to_string())),
         }
     }
 }
 
-impl Handler<ClientRequestWrapper<crate::api::start_game::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<crate::api::start_game::Request>>;
+impl Handler<ClientRequestWrapper<start_game::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<start_game::Request>>;
 
     fn handle(
         &mut self,
-        msg: ClientRequestWrapper<crate::api::start_game::Request>,
+        msg: ClientRequestWrapper<start_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         match self.gm.start_game(msg.client_uuid) {
             Ok(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::Ok(crate::api::start_game::Response{})),
+                    response::GenericResponse::Ok(start_game::Response{})),
             Err(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+                    response::GenericResponse::ClientError("failed".to_string())),
         }
     }
 }
 
-
-
-impl Handler<ClientRequestWrapper<crate::api::set_player_ready::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<crate::api::set_player_ready::Request>>;
+impl Handler<ClientRequestWrapper<set_player_ready::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<set_player_ready::Request>>;
 
     fn handle(
         &mut self,
-        msg: ClientRequestWrapper<crate::api::set_player_ready::Request>,
+        msg: ClientRequestWrapper<set_player_ready::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         match self.gm.set_player_ready(msg.client_uuid, msg.req.ready_state) {
             Ok(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::Ok(crate::api::set_player_ready::Response{})),
+                    response::GenericResponse::Ok(set_player_ready::Response{})),
             Err(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+                    response::GenericResponse::ClientError("failed".to_string())),
         }
     }
 }
 
 
-impl Handler<ClientRequestWrapper<crate::api::submit_drawing::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<crate::api::submit_drawing::Request>>;
+impl Handler<ClientRequestWrapper<submit_drawing::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<submit_drawing::Request>>;
 
     fn handle(
         &mut self,
-        msg: ClientRequestWrapper<crate::api::submit_drawing::Request>,
+        msg: ClientRequestWrapper<submit_drawing::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         match self.gm.submit_drawing(msg.client_uuid, msg.req.drawing, msg.req.round) {
             Ok(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::Ok(crate::api::submit_drawing::Response{})),
+                    response::GenericResponse::Ok(submit_drawing::Response{})),
             Err(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+                    response::GenericResponse::ClientError("failed".to_string())),
         }
     }
 }
 
-impl Handler<ClientRequestWrapper<crate::api::vote::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<crate::api::vote::Request>>;
+impl Handler<ClientRequestWrapper<vote::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<vote::Request>>;
 
     fn handle(
         &mut self,
-        msg: ClientRequestWrapper<crate::api::vote::Request>,
+        msg: ClientRequestWrapper<vote::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         match self.gm.vote(msg.client_uuid, msg.req.votes) {
             Ok(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::Ok(crate::api::vote::Response{})),
+                    response::GenericResponse::Ok(vote::Response{})),
             Err(_) =>
                 MessageResult(
-                    crate::api::response::GenericResponse::ClientError("failed".to_string())),
+                    response::GenericResponse::ClientError("failed".to_string())),
         }
     }
 }

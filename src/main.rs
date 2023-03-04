@@ -1,16 +1,50 @@
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix::prelude::*;
+use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web_actors::ws;
 
-#[get("/hello/{name}")]
-async fn greet(name: web::Path<String>) -> impl Responder {
-    format!("Hello {name}!")
+use log::{info, error};
+
+mod api;
+mod game_manager;
+mod room_code_generator;
+mod game;
+mod player;
+mod client_session;
+mod server;
+mod drawing;
+
+
+pub async fn ws_route(
+    req: HttpRequest,
+    stream: web::Payload,
+    server: web::Data<Addr<server::GameServer>>
+) -> Result<HttpResponse, Error> {
+    info!("Connection from: {}", req.peer_addr().expect("oops missing addr?"));
+    //info!("Headers: {:?}", req.headers());
+
+    let session = client_session::ClientSession::new(
+        server.get_ref().clone(),
+        req.peer_addr().expect("oops")
+    );
+    let resp = ws::start(session, &req, stream);
+    info!("index_resp: {:?}", resp);
+    resp
 }
 
-#[actix_web::main] // or #[tokio::main]
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new().service(greet)
-    })
-    .bind(("127.0.0.1", 8080))?
-    .run()
-    .await
+
+    env_logger::init();
+
+    let server = server::GameServer::new().start();
+
+    info!("init server");
+    HttpServer::new(move ||
+            App::new()
+                .app_data(web::Data::new(server.clone()))
+                .route("/ws/", web::get().to(ws_route))
+        )
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
 }

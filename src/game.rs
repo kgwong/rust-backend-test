@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc};
 
 use log::info;
 use serde::{Serialize, Deserialize};
@@ -71,6 +71,9 @@ impl Game {
     pub fn add_player(&mut self, player: Rc<PlayerClient>) -> Result<(), JoinGameError> {
         if self.players.len() == MAX_PLAYERS {
             return Err(JoinGameError);
+        }
+        if self.state != GameState::WaitingForPlayers {
+            return Err(JoinGameError)
         }
 
         //TODO clean this up
