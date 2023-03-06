@@ -1,7 +1,7 @@
 use actix::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::game::{GameState, PlayerView};
+use crate::game::{game::{GameState}, player_view::PlayerView};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClientInfo {

@@ -4,15 +4,11 @@ use actix_web_actors::ws;
 
 use log::{info, error};
 
-mod api;
-mod game_manager;
-mod room_code_generator;
-mod game;
-mod player;
-mod client_session;
-mod server;
-mod drawing;
+use crate::websocket::*;
 
+mod api;
+mod game;
+mod websocket;
 
 pub async fn ws_route(
     req: HttpRequest,

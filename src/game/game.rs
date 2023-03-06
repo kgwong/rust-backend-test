@@ -1,32 +1,11 @@
-use std::{rc::Rc};
+use std::{rc::Rc, fs::File};
 
-use log::info;
+use log::{info, error};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 use crate::{player::PlayerClient, api::game_update::{GameUpdate, ClientInfo}};
-
-// TODO, make this an actual view, and not just copy fields?
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PlayerView {
-    pub name: String,
-    pub ready_state: bool
-}
-
-#[derive(Debug)]
-pub struct Player{
-    pub client: Rc<PlayerClient>,
-    pub ready_state: bool,
-}
-
-impl Player{
-    pub fn to_view(&self) -> PlayerView {
-        PlayerView {
-            name: self.client.name.clone(),
-            ready_state: self.ready_state
-        }
-    }
-}
+use super::{player_view::Player, drawing::Drawing, round::Round, deck::Deck};
 
 #[derive(Debug)]
 pub struct JoinGameError;
@@ -36,14 +15,13 @@ pub struct StartGameError;
 
 const MIN_PLAYERS: usize = 2;
 const MAX_PLAYERS: usize = 8;
-const MAX_ROUNDS: usize = 5;
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GameState{
     WaitingForPlayers,
     DrawingPhase,
-    VotingPlase,
+    VotingPhase,
     Results,
 }
 
@@ -52,10 +30,14 @@ pub struct Game{
     room_code: String,
     state: GameState,
     players: std::vec::Vec<Player>,
-    round: usize,
-    max_rounds: usize,
+    curr_round: usize,
+    rounds: std::vec::Vec<Round>,
+    num_rounds: usize,
+
+    drawing_suggestions_deck: Deck<>,
 }
 
+// Public API
 impl Game {
 
     pub fn new(room_code: String, host_player: Rc<PlayerClient>) -> Self {
@@ -63,8 +45,11 @@ impl Game {
             room_code: room_code,
             state: GameState::WaitingForPlayers,
             players: std::vec![Player{client: host_player, ready_state: false}],
-            round: 0,
-            max_rounds: MAX_ROUNDS,
+            curr_round: 0,
+            rounds: std::vec![],
+            num_rounds: 5,
+            drawing_suggestions_deck:
+                Deck::from(File::open("./drawing_suggestions.json").expect("file")).expect("expect"),
         }
     }
 
@@ -99,8 +84,11 @@ impl Game {
                 return Err(StartGameError);
             }
             info!("Host is starting the game");
-            self.state = GameState::DrawingPhase;
-            self.broadcast_update();
+            self.rounds = std::vec![Round::new(self.get_client_ids()); self.num_rounds];
+            self.start_round(0);
+
+
+            info!("Suggestion: {}", self.drawing_suggestions_deck.draw_card().unwrap());
             Ok(())
         } else {
             Err(StartGameError)
@@ -117,30 +105,27 @@ impl Game {
         }
     }
 
-    pub fn broadcast_update(&self) {
-        info!("Broadcasting update to all players");
-        for (i, p) in self.players.iter().enumerate() {
-            self.send_game_view_to_player(&p.client, i);
+    pub fn submit_drawing(&mut self, client_id: Uuid, drawing: Drawing, round: usize) -> Result<(), ()> {
+        if self.curr_round != round {
+            error!("Not Current Round");
+            return Err(());
         }
-    }
 
-    fn current_game_view(&self, client_info: ClientInfo) -> GameUpdate {
-        GameUpdate {
-            message_name: "game_update".to_string(),
-            room_code: self.room_code.clone(),
-            state: self.state.clone(),
-            round: self.round,
-            players: self.players.iter().map(|p| p.to_view()).collect(),
-            client_info: client_info,
+        let round = self.get_current_round();
+        if let Some(_) = round.get_drawing(&client_id) {
+            error!("Drawing already Exists");
+            return Err(()) //TODO drawing already exist
         }
-    }
 
-    fn send_game_view_to_player(&self, player: &PlayerClient, index: usize) {
-        player.client_addr.do_send(
-            self.current_game_view(ClientInfo{player_index: index})
-        );
+        round.set_drawing(&client_id, drawing);
+        if round.is_done() {
+            self.finish_round();
+        }
+        Ok(())
     }
+}
 
+impl Game {
     /**
      *  Returns a new name in the form of `name(1)` if it's a duplicate of an existing name
      */
@@ -153,5 +138,53 @@ impl Game {
             count += 1;
         }
         proposed_name
+    }
+
+    // TODO: shouldn't need to copy these
+    fn get_client_ids(&self) -> Vec<Uuid> {
+        self.players.iter().map(|p| p.client.client_uuid).collect()
+    }
+
+    fn get_current_round(&mut self) -> &mut Round {
+        self.rounds.get_mut(self.curr_round).unwrap()
+    }
+
+    fn start_round(&mut self, round_num: usize) {
+        self.state = GameState::DrawingPhase;
+        self.curr_round = round_num; //TODO: should we havn a non-started state?, or value in an enum?
+        self.broadcast_update();
+    }
+
+    fn finish_round(&mut self) {
+        self.curr_round += 1;
+        self.state = GameState::VotingPhase;
+        self.broadcast_update()
+    }
+}
+
+// Messaging
+impl Game {
+    pub fn broadcast_update(&self) {
+        info!("Broadcasting update to all players");
+        for (i, p) in self.players.iter().enumerate() {
+            self.send_game_view_to_player(&p.client, i);
+        }
+    }
+
+    fn current_game_view(&self, client_info: ClientInfo) -> GameUpdate {
+        GameUpdate {
+            message_name: "game_update".to_string(),
+            room_code: self.room_code.clone(),
+            state: self.state.clone(),
+            round: self.curr_round,
+            players: self.players.iter().map(|p| p.to_view()).collect(),
+            client_info: client_info,
+        }
+    }
+
+    fn send_game_view_to_player(&self, player: &PlayerClient, index: usize) {
+        player.client_addr.do_send(
+            self.current_game_view(ClientInfo{player_index: index})
+        );
     }
 }

@@ -3,7 +3,7 @@ use std::{net, rc::Rc};
 
 use log::info;
 
-use crate::{api::*, game_manager, client_session::ClientSession};
+use crate::{api::*, game::game_manager, client_session::ClientSession};
 
 use uuid::Uuid;
 
