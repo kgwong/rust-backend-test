@@ -2,6 +2,8 @@ use std::{fs, io::Read};
 
 use serde::Deserialize;
 
+use rand::seq::SliceRandom;
+
 //TODO add type param
 #[derive(Debug)]
 pub struct Deck<> {
@@ -21,6 +23,10 @@ impl<> Deck<> {
 
     pub fn draw_card(&mut self) -> Option<String> {
         self.v.pop()
+    }
+
+    pub fn shuffle(&mut self) {
+        self.v.shuffle(&mut rand::thread_rng());
     }
 
 }

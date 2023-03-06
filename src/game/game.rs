@@ -85,10 +85,11 @@ impl Game {
             }
             info!("Host is starting the game");
             self.rounds = std::vec![Round::new(self.get_client_ids()); self.num_rounds];
-            self.start_round(0);
 
-
+            self.drawing_suggestions_deck.shuffle();
             info!("Suggestion: {}", self.drawing_suggestions_deck.draw_card().unwrap());
+
+            self.start_round(0);
             Ok(())
         } else {
             Err(StartGameError)
