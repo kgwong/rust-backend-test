@@ -168,3 +168,15 @@ impl Handler<crate::api::game_update::GameUpdate> for ClientSession {
         ctx.text(serde_json::to_string(&msg).expect("oops"));
     }
 }
+
+impl Handler<crate::api::drawing_parameters::DrawingParameters> for ClientSession {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: crate::api::drawing_parameters::DrawingParameters,
+        ctx: &mut Self::Context)
+    -> Self::Result {
+        ctx.text(serde_json::to_string(&msg).expect("oops"));
+    }
+}

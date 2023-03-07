@@ -4,7 +4,7 @@ use log::{info, error};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-use crate::{player::PlayerClient, api::game_update::{GameUpdate, ClientInfo}};
+use crate::{player::PlayerClient, api::{game_update::{GameUpdate, ClientInfo}, drawing_parameters::DrawingParameters}};
 use super::{player_view::Player, drawing::Drawing, round::Round, deck::Deck};
 
 #[derive(Debug)]
@@ -84,10 +84,10 @@ impl Game {
                 return Err(StartGameError);
             }
             info!("Host is starting the game");
-            self.rounds = std::vec![Round::new(self.get_client_ids()); self.num_rounds];
-
             self.drawing_suggestions_deck.shuffle();
-            info!("Suggestion: {}", self.drawing_suggestions_deck.draw_card().unwrap());
+            // TODO figure out how to handle round creation
+            self.rounds = std::vec![
+                Round::new(self.get_client_ids(), &mut self.drawing_suggestions_deck); self.num_rounds];
 
             self.start_round(0);
             Ok(())
@@ -112,7 +112,7 @@ impl Game {
             return Err(());
         }
 
-        let round = self.get_current_round();
+        let round = self.get_current_round_mut();
         if let Some(_) = round.get_drawing(&client_id) {
             error!("Drawing already Exists");
             return Err(()) //TODO drawing already exist
@@ -146,14 +146,19 @@ impl Game {
         self.players.iter().map(|p| p.client.client_uuid).collect()
     }
 
-    fn get_current_round(&mut self) -> &mut Round {
+    fn get_current_round_mut(&mut self) -> &mut Round {
         self.rounds.get_mut(self.curr_round).unwrap()
+    }
+
+    fn get_current_round(&self) -> &Round {
+        self.rounds.get(self.curr_round).unwrap()
     }
 
     fn start_round(&mut self, round_num: usize) {
         self.state = GameState::DrawingPhase;
         self.curr_round = round_num; //TODO: should we havn a non-started state?, or value in an enum?
         self.broadcast_update();
+        self.send_drawing_parameters();
     }
 
     fn finish_round(&mut self) {
@@ -170,6 +175,21 @@ impl Game {
         for (i, p) in self.players.iter().enumerate() {
             self.send_game_view_to_player(&p.client, i);
         }
+    }
+
+    pub fn send_drawing_parameters(&self) {
+        let round = self.get_current_round();
+        for p in self.players.iter() {
+            p.client.client_addr.do_send(
+                DrawingParameters {
+                    message_name: "drawing_parameters".to_string(),
+                    round: self.curr_round,
+                    drawing_suggestion:
+                        round.get_drawing_suggestion(&p.client.client_uuid).unwrap().clone(),
+                }
+            )
+        }
+
     }
 
     fn current_game_view(&self, client_info: ClientInfo) -> GameUpdate {
