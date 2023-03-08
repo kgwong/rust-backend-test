@@ -1,10 +1,14 @@
-use std::{rc::Rc, fs::File};
+use std::{rc::Rc, fs::File, collections::HashMap};
 
 use log::{info, error};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-use crate::{player::PlayerClient, api::{game_update::{GameUpdate, ClientInfo}, drawing_parameters::DrawingParameters}};
+use crate::{player::PlayerClient, api::{
+    server_messages::{
+        game_update::{GameUpdate, ClientInfo},
+        drawing_parameters::DrawingParameters,
+        voting_ballot::{BallotItem, VotingBallot}}}, websocket::player};
 use super::{player_view::Player, drawing::Drawing, round::Round, deck::Deck};
 
 #[derive(Debug)]
@@ -120,6 +124,8 @@ impl Game {
 
         round.set_drawing(&client_id, drawing);
         if round.is_done() {
+            self.send_voting_ballots();
+            //TODO round shouldn't be done until the voting phase is done for it
             self.finish_round();
         }
         Ok(())
@@ -207,5 +213,44 @@ impl Game {
         player.client_addr.do_send(
             self.current_game_view(ClientInfo{player_index: index})
         );
+    }
+
+    fn send_voting_ballots(&self) {
+        let round = self.get_current_round();
+        let drawings = round.get_data();
+
+        let full_ballot: HashMap<&Uuid, BallotItem> =
+            drawings.iter().map(|(player_id, round_data)| {
+                info!("Collecting ballot for client_id: {}", player_id);
+                let b = BallotItem {
+                    id: Uuid::new_v4(),
+                    suggestion: round_data.drawing_suggestion.clone(),
+                    drawing: round_data.drawing.clone().expect("drawing should exist"),
+                };
+                (player_id, b)
+            }).collect();
+
+        for p in self.players.iter() {
+            self.send_voting_ballots_to_player(&p.client, &full_ballot);
+        }
+    }
+
+    fn send_voting_ballots_to_player(&self, player: &PlayerClient, full_ballot: &HashMap<&Uuid, BallotItem>) {
+        // Send all the ballot items except the players own drawing
+        //let ballot: Vec<BallotItem> = full_ballot.into_iter()
+        //    .filter(|(player_id, _)| player.client_uuid != **player_id)
+        //    .map(|(player_id, ballot_item)| ballot_item)
+        //    .collect();
+
+        // Actually, send the whole ballot by
+        //let i: Vec<&BallotItem = full_ballot.iter().map(|(i, j)| j).collect();
+        let ballot: Vec<BallotItem> = full_ballot.iter()
+                .map(|(_, ballot_item)| (*ballot_item).clone())
+                .collect();
+        player.client_addr.do_send(VotingBallot {
+            message_name: "voting_ballot".to_string(),
+            round: self.curr_round,
+            ballot: ballot,
+        })
     }
 }

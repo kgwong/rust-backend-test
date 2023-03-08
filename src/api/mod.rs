@@ -7,5 +7,4 @@ pub mod vote;
 
 pub mod response;
 
-pub mod game_update;
-pub mod drawing_parameters;
+pub mod server_messages;

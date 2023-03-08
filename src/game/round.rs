@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use log::info;
 use uuid::Uuid;
 
 use super::{drawing::Drawing, deck::Deck};
@@ -28,6 +29,10 @@ impl Round {
         }
     }
 
+    pub fn get_data(&self) -> &HashMap<Uuid, RoundDataPerPlayer> {
+        &self.round_data_per_player
+    }
+
     pub fn get_drawing_suggestion(&self, client_id: &Uuid) -> Option<&String> {
         self.round_data_per_player.get(client_id).map(|data| &data.drawing_suggestion)
     }
@@ -38,6 +43,7 @@ impl Round {
     }
 
     pub fn set_drawing(&mut self, client_id: &Uuid, drawing: Drawing) {
+        info!("set_drawing client_id: {}", client_id);
         let player_data = self.round_data_per_player.get_mut(client_id).unwrap();
         player_data.drawing = Some(drawing);
     }

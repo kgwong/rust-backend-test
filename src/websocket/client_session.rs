@@ -7,6 +7,7 @@ use log::{info, error};
 
 use serde_json::{Value};
 
+use crate::api::server_messages::*;
 use crate::server::{self, ClientRequestWrapper};
 
 use uuid::Uuid;
@@ -157,24 +158,36 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
 
 
 
-impl Handler<crate::api::game_update::GameUpdate> for ClientSession {
+impl Handler<game_update::GameUpdate> for ClientSession {
     type Result = ();
 
     fn handle(
         &mut self,
-        msg: crate::api::game_update::GameUpdate,
+        msg: game_update::GameUpdate,
         ctx: &mut Self::Context)
     -> Self::Result {
         ctx.text(serde_json::to_string(&msg).expect("oops"));
     }
 }
 
-impl Handler<crate::api::drawing_parameters::DrawingParameters> for ClientSession {
+impl Handler<drawing_parameters::DrawingParameters> for ClientSession {
     type Result = ();
 
     fn handle(
         &mut self,
-        msg: crate::api::drawing_parameters::DrawingParameters,
+        msg: drawing_parameters::DrawingParameters,
+        ctx: &mut Self::Context)
+    -> Self::Result {
+        ctx.text(serde_json::to_string(&msg).expect("oops"));
+    }
+}
+
+impl Handler<voting_ballot::VotingBallot> for ClientSession {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: voting_ballot::VotingBallot,
         ctx: &mut Self::Context)
     -> Self::Result {
         ctx.text(serde_json::to_string(&msg).expect("oops"));

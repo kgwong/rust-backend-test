@@ -8,6 +8,7 @@ pub struct ClientInfo {
     pub player_index: usize,
 }
 
+// rename to lobby update?
 #[derive(Serialize, Deserialize, Debug, Message)]
 #[rtype(result = "()")]
 pub struct GameUpdate {
