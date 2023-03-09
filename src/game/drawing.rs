@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 
-pub type Coordinates = std::vec::Vec<(i32, i32)>;
+pub type Coordinates = std::vec::Vec<(f32, f32)>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Stroke {
