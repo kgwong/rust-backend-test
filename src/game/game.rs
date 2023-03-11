@@ -34,7 +34,7 @@ pub struct Game{
     room_code: String,
     state: GameState,
     players: std::vec::Vec<Player>,
-    curr_round: usize,
+    curr_round: Option<usize>, // 1-indexed
     rounds: std::vec::Vec<Round>,
     num_rounds: usize,
 
@@ -49,7 +49,7 @@ impl Game {
             room_code: room_code,
             state: GameState::WaitingForPlayers,
             players: std::vec![Player::new(host_player)],
-            curr_round: 0,
+            curr_round: None,
             rounds: std::vec![],
             num_rounds: 5,
             drawing_suggestions_deck:
@@ -90,11 +90,7 @@ impl Game {
             }
             info!("Host is starting the game");
             self.drawing_suggestions_deck.shuffle();
-            // TODO figure out how to handle round creation
-            self.rounds = std::vec![
-                Round::new(self.get_client_ids(), &mut self.drawing_suggestions_deck); self.num_rounds];
-
-            self.start_round(0);
+            self.start_next_round();
             Ok(())
         } else {
             Err(StartGameError)
@@ -112,12 +108,12 @@ impl Game {
     }
 
     pub fn submit_drawing(&mut self, client_id: Uuid, drawing: Drawing, round: usize) -> Result<(), ()> {
-        if self.curr_round != round {
-            error!("Not Current Round");
+        if self.curr_round != Some(round) {
+            error!("Not Current Round: curr_round: {}, round {}", self.curr_round.unwrap(), round);
             return Err(());
         }
 
-        let round = self.get_current_round_mut();
+        let round = self.get_current_round_mut().ok_or(())?;
         if let Some(_) = round.get_drawing(&client_id) {
             error!("Drawing already Exists");
             return Err(()) //TODO drawing already exist
@@ -128,8 +124,6 @@ impl Game {
             self.send_voting_ballots();
             self.state = GameState::VotingPhase;
             self.broadcast_update()
-            //TODO round shouldn't be done until the voting phase is done for it
-            // self.finish_round();
         }
         Ok(())
     }
@@ -138,7 +132,7 @@ impl Game {
         let mut scores = None;
 
         {
-            let round = self.get_current_round_mut();
+            let round = self.get_current_round_mut().ok_or(())?;
             round.submit_vote(&client_id, votes);
             if round.is_done_voting() {
                 scores = Some(round.get_scores());
@@ -149,7 +143,13 @@ impl Game {
 
         {
             self.add_to_score(&scores.unwrap());
-            self.start_round(self.curr_round + 1);
+
+            // this is the last round
+            if self.curr_round == Some(self.num_rounds) {
+
+            } else {
+                self.start_next_round();
+            }
         }
         Ok(())
     }
@@ -177,17 +177,20 @@ impl Game {
         self.players.iter().map(|p| p.client.client_uuid).collect()
     }
 
-    fn get_current_round_mut(&mut self) -> &mut Round {
-        self.rounds.get_mut(self.curr_round).unwrap()
+    fn get_current_round_mut(&mut self) -> Option<&mut Round> {
+        self.rounds.last_mut()
     }
 
-    fn get_current_round(&self) -> &Round {
-        self.rounds.get(self.curr_round).unwrap()
+    fn get_current_round(&self) -> Option<&Round> {
+        self.rounds.last()
     }
 
-    fn start_round(&mut self, round_num: usize) {
+    fn start_next_round(&mut self) {
+        self.curr_round = Some(self.curr_round.map_or(1, |v| v + 1));
+        self.rounds.push(
+            Round::new(self.get_client_ids(), &mut self.drawing_suggestions_deck));
+
         self.state = GameState::DrawingPhase;
-        self.curr_round = round_num; //TODO: should we havn a non-started state?, or value in an enum?
         self.broadcast_update();
         self.send_drawing_parameters();
     }
@@ -211,12 +214,12 @@ impl Game {
     }
 
     pub fn send_drawing_parameters(&self) {
-        let round = self.get_current_round();
+        let round = self.get_current_round().unwrap();
         for p in self.players.iter() {
             p.client.client_addr.do_send(
                 DrawingParameters {
                     message_name: "drawing_parameters".to_string(),
-                    round: self.curr_round,
+                    round: self.curr_round.unwrap(),
                     drawing_suggestion:
                         round.get_drawing_suggestion(&p.client.client_uuid).unwrap().clone(),
                 }
@@ -243,7 +246,7 @@ impl Game {
     }
 
     fn send_voting_ballots(&self) {
-        let round = self.get_current_round();
+        let round = self.get_current_round().unwrap();
         let drawings = round.get_data();
 
         let full_ballot: HashMap<&Uuid, BallotItem> =
@@ -276,7 +279,7 @@ impl Game {
                 .collect();
         player.client_addr.do_send(VotingBallot {
             message_name: "voting_ballot".to_string(),
-            round: self.curr_round,
+            round: self.curr_round.unwrap(),
             ballot: ballot,
         })
     }

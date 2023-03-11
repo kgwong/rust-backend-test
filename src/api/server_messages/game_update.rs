@@ -15,7 +15,7 @@ pub struct GameUpdate {
     pub message_name: String, //TODO
     pub room_code: String,
     pub state: GameState,
-    pub round: usize,
+    pub round: Option<usize>,
     pub players: std::vec::Vec<PlayerView>,
 
     pub client_info: ClientInfo,
