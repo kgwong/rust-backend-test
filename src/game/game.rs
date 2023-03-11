@@ -8,7 +8,7 @@ use crate::{player::PlayerClient, api::{
     server_messages::{
         game_update::{GameUpdate, ClientInfo},
         drawing_parameters::DrawingParameters,
-        voting_ballot::{BallotItem, VotingBallot}}}, websocket::player};
+        voting_ballot::{BallotItem, VotingBallot}}}};
 use super::{player_view::Player, drawing::Drawing, round::Round, deck::Deck};
 
 #[derive(Debug)]
@@ -144,9 +144,10 @@ impl Game {
         {
             self.add_to_score(&scores.unwrap());
 
-            // this is the last round
+            // this is the last round, go to results
             if self.curr_round == Some(self.num_rounds) {
-
+                self.state = GameState::Results;
+                self.broadcast_update();
             } else {
                 self.start_next_round();
             }
@@ -234,6 +235,7 @@ impl Game {
             room_code: self.room_code.clone(),
             state: self.state.clone(),
             round: self.curr_round,
+            num_rounds: self.num_rounds,
             players: self.players.iter().map(|p| p.to_view()).collect(),
             client_info: client_info,
         }
