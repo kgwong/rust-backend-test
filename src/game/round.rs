@@ -5,15 +5,20 @@ use uuid::Uuid;
 
 use super::{drawing::Drawing, deck::Deck};
 
+
+// TODO: this struct doesn't really make sense
 #[derive(Debug, Clone)]
 pub struct RoundDataPerPlayer {
+    pub drawing_id: Uuid,
     pub drawing_suggestion: String,
-    pub drawing: Option<Drawing>
+    pub drawing: Option<Drawing>,
+    pub has_voted: bool,
+    pub votes: i32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Round {
-    pub round_data_per_player: HashMap<Uuid, RoundDataPerPlayer>
+    pub round_data_per_player: HashMap<Uuid, RoundDataPerPlayer>,
 }
 
 impl Round {
@@ -22,10 +27,13 @@ impl Round {
             round_data_per_player:
                 client_ids.into_iter().map(|id|
                     (id, RoundDataPerPlayer{
+                        drawing_id: Uuid::new_v4(),
                         drawing_suggestion: suggestion_deck.draw_card().unwrap(),
-                        drawing: None
+                        drawing: None,
+                        has_voted: false,
+                        votes: 0,
                     })
-                ).collect()
+                ).collect(),
         }
     }
 
@@ -48,8 +56,34 @@ impl Round {
         player_data.drawing = Some(drawing);
     }
 
-    pub fn is_done(&self) -> bool {
-        return self.round_data_per_player.iter()
+    pub fn submit_vote(&mut self, client_id: &Uuid, votes: HashMap<Uuid, i32>) {
+        // TODO: verify that the votes are not greater than the maximum
+        for (id, data) in self.round_data_per_player.iter_mut() {
+            if client_id == id {
+                // TODO: verify that they didn't vote for their own drawing
+                //votes.get(&data.drawing_id)
+            }
+            // TODO verify that the votes have all valid drawing ids
+            data.votes += votes.get(&data.drawing_id).unwrap();
+        }
+        let player_data = self.round_data_per_player.get_mut(client_id).unwrap();
+        player_data.has_voted = true
+
+    }
+
+    pub fn is_done_drawing(&self) -> bool {
+        self.round_data_per_player.iter()
             .fold(true, |acc, (_, v)| acc && v.drawing.is_some())
+    }
+
+    pub fn is_done_voting(&self) -> bool {
+        self.round_data_per_player.iter()
+            .fold(true, |acc, (_, v)| acc && v.has_voted)
+    }
+
+    //TODO type the Uuids
+    pub fn get_scores(&self) -> HashMap<Uuid, i32> {
+        self.round_data_per_player.iter().map(|(player_id, data)|
+            (player_id.clone(), data.votes)).collect()
     }
 }

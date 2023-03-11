@@ -1,5 +1,9 @@
+use std::collections::HashMap;
+
 use actix::prelude::*;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
 use super::response::*;
 use super::response::TMessageName;
 
@@ -11,11 +15,11 @@ pub struct Response{
 #[derive(Serialize, Deserialize, Debug, Message)]
 #[rtype(result = "GenericResponse<Response>")]
 pub struct Request {
-    pub votes: std::collections::HashMap<String, i32>,
+    pub votes: HashMap<Uuid, i32>,
 }
 
 impl TMessageName for Response{
     fn message_name() -> &'static str {
-        "vote"
+        "submit_vote"
     }
 }

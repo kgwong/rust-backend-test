@@ -19,7 +19,7 @@ pub struct ReadyPlayerError;
 pub struct SubmitDrawingError;
 
 #[derive(Debug)]
-pub struct VoteError;
+pub struct SubmitVoteError;
 
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
@@ -86,10 +86,10 @@ impl GameManager {
         game.submit_drawing(client_id, drawing, round).map_err(|_| SubmitDrawingError)
     }
 
-    pub fn vote(&mut self, client_id: Uuid, votes: HashMap<String, i32>)
-    -> Result<(), VoteError> {
-        let game = self.get_game_mut(client_id).ok_or_else(|| VoteError)?;
-        Err(VoteError{})
+    pub fn vote(&mut self, client_id: Uuid, votes: HashMap<Uuid, i32>)
+    -> Result<(), SubmitVoteError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| SubmitVoteError)?;
+        game.submit_vote(client_id, votes).map_err(|_| SubmitVoteError)
     }
 
     fn is_already_in_a_game(&self, client_id: &Uuid) -> bool {

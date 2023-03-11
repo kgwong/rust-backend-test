@@ -125,8 +125,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                                     });
                                 l.wait(ctx);
                             }
-                            "vote" => {
-                                let req: crate::api::vote::Request = serde_json::from_str(&text).expect("failed to parse");
+                            "submit_vote" => {
+                                let req: crate::api::submit_vote::Request = serde_json::from_str(&text).expect("failed to parse");
                                 let l = self.server
                                     .send(self.wrap_request(req, ctx))
                                     .into_actor(self)

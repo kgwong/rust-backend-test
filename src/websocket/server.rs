@@ -149,18 +149,18 @@ impl Handler<ClientRequestWrapper<submit_drawing::Request>> for GameServer {
     }
 }
 
-impl Handler<ClientRequestWrapper<vote::Request>> for GameServer {
-    type Result = MessageResult<ClientRequestWrapper<vote::Request>>;
+impl Handler<ClientRequestWrapper<submit_vote::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<submit_vote::Request>>;
 
     fn handle(
         &mut self,
-        msg: ClientRequestWrapper<vote::Request>,
+        msg: ClientRequestWrapper<submit_vote::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
         match self.gm.vote(msg.client_uuid, msg.req.votes) {
             Ok(_) =>
                 MessageResult(
-                    response::GenericResponse::Ok(vote::Response{})),
+                    response::GenericResponse::Ok(submit_vote::Response{})),
             Err(_) =>
                 MessageResult(
                     response::GenericResponse::ClientError("failed".to_string())),

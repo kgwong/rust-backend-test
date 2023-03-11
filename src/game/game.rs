@@ -48,7 +48,7 @@ impl Game {
         Game {
             room_code: room_code,
             state: GameState::WaitingForPlayers,
-            players: std::vec![Player{client: host_player, ready_state: false}],
+            players: std::vec![Player::new(host_player)],
             curr_round: 0,
             rounds: std::vec![],
             num_rounds: 5,
@@ -73,7 +73,8 @@ impl Game {
             name: self.resolve_name(&player),
         });
 
-        self.players.push(Player { client: resolved_player, ready_state: false });
+        // TODO: move name out of player client
+        self.players.push(Player::new(resolved_player));
         info!("CurrentPlayers: {:?}", self.players);
         self.broadcast_update();
         return Ok(());
@@ -123,13 +124,37 @@ impl Game {
         }
 
         round.set_drawing(&client_id, drawing);
-        if round.is_done() {
+        if round.is_done_drawing() {
             self.send_voting_ballots();
+            self.state = GameState::VotingPhase;
+            self.broadcast_update()
             //TODO round shouldn't be done until the voting phase is done for it
-            self.finish_round();
+            // self.finish_round();
         }
         Ok(())
     }
+
+    pub fn submit_vote(&mut self, client_id: Uuid, votes: HashMap<Uuid, i32>) -> Result<(), ()>{
+        let mut scores = None;
+
+        {
+            let round = self.get_current_round_mut();
+            round.submit_vote(&client_id, votes);
+            if round.is_done_voting() {
+                scores = Some(round.get_scores());
+            } else {
+                return Ok(())
+            }
+        }
+
+        {
+            self.add_to_score(&scores.unwrap());
+            self.start_round(self.curr_round + 1);
+        }
+        Ok(())
+    }
+
+
 }
 
 impl Game {
@@ -167,10 +192,12 @@ impl Game {
         self.send_drawing_parameters();
     }
 
-    fn finish_round(&mut self) {
-        self.curr_round += 1;
-        self.state = GameState::VotingPhase;
-        self.broadcast_update()
+    fn add_to_score(&mut self, scores: &HashMap<Uuid, i32>) {
+        // TODO: this is silly
+        for (player_id, points) in scores.iter(){
+            let player = self.players.iter_mut().find(|p| p.client.client_uuid == *player_id).unwrap();
+            player.score += *points;
+        }
     }
 }
 
@@ -223,7 +250,7 @@ impl Game {
             drawings.iter().map(|(player_id, round_data)| {
                 info!("Collecting ballot for client_id: {}", player_id);
                 let b = BallotItem {
-                    id: Uuid::new_v4(),
+                    id: round_data.drawing_id.clone(),
                     suggestion: round_data.drawing_suggestion.clone(),
                     drawing: round_data.drawing.clone().expect("drawing should exist"),
                 };
