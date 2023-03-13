@@ -9,7 +9,7 @@ use crate::{player::PlayerClient, api::{
         game_update::{GameUpdate, ClientInfo},
         drawing_parameters::DrawingParameters,
         voting_ballot::{BallotItem, VotingBallot}}}};
-use super::{player_view::Player, drawing::Drawing, round::Round, deck::Deck};
+use super::{player_view::Player, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector};
 
 #[derive(Debug)]
 pub struct JoinGameError;
@@ -33,16 +33,16 @@ pub enum GameState{
 pub struct Game{
     room_code: String,
     state: GameState,
-    players: std::vec::Vec<Player>,
+    players: Vec<Player>,
     curr_round: Option<usize>, // 1-indexed
-    rounds: std::vec::Vec<Round>,
+    rounds: Vec<Round>,
     num_rounds: usize,
 
     drawing_suggestions_deck: Deck<>,
 }
 
 // Public API
-impl Game {
+impl Game{
 
     pub fn new(room_code: String, host_player: Rc<PlayerClient>) -> Self {
         Game {
@@ -119,7 +119,7 @@ impl Game {
             return Err(()) //TODO drawing already exist
         }
 
-        round.set_drawing(&client_id, drawing);
+        round.set_drawing(&client_id, Rc::new(drawing));
         if round.is_done_drawing() {
             self.send_voting_ballots();
             self.state = GameState::VotingPhase;
@@ -131,18 +131,16 @@ impl Game {
     pub fn submit_vote(&mut self, client_id: Uuid, votes: HashMap<Uuid, i32>) -> Result<(), ()>{
         let mut scores = None;
 
-        {
-            let round = self.get_current_round_mut().ok_or(())?;
-            round.submit_vote(&client_id, votes);
-            if round.is_done_voting() {
-                scores = Some(round.get_scores());
-            } else {
-                return Ok(())
-            }
+        let round = self.get_current_round_mut().ok_or(())?;
+        round.submit_vote(&client_id, votes);
+        if round.is_done_voting() {
+            scores = Some(round.get_scores());
+        } else {
+            return Ok(())
         }
 
-        {
-            self.add_to_score(&scores.unwrap());
+        if let Some(s) = scores {
+            self.add_to_score(&s);
 
             // this is the last round, go to results
             if self.curr_round == Some(self.num_rounds) {
@@ -158,7 +156,7 @@ impl Game {
 
 }
 
-impl Game {
+impl Game{
     /**
      *  Returns a new name in the form of `name(1)` if it's a duplicate of an existing name
      */
@@ -187,9 +185,23 @@ impl Game {
     }
 
     fn start_next_round(&mut self) {
+        let mut imprint_map: HashMap<Uuid, Option<Rc<Drawing>>> = HashMap::new();
+        if let Some(round) = self.get_current_round() {
+            imprint_map = round.get_data().iter()
+                .map(|(player_id, data)| {
+                    let drawing: &Drawing = data.drawing.as_ref().unwrap();
+                    (player_id.clone(), Some(Rc::new(imprint_selector::random(drawing, 3))))
+                })
+                .collect();
+        }
+
         self.curr_round = Some(self.curr_round.map_or(1, |v| v + 1));
         self.rounds.push(
-            Round::new(self.get_client_ids(), &mut self.drawing_suggestions_deck));
+            Round::new(
+                self.get_client_ids(),
+                &mut self.drawing_suggestions_deck,
+                &imprint_map,
+            ));
 
         self.state = GameState::DrawingPhase;
         self.broadcast_update();
@@ -206,7 +218,7 @@ impl Game {
 }
 
 // Messaging
-impl Game {
+impl Game{
     pub fn broadcast_update(&self) {
         info!("Broadcasting update to all players");
         for (i, p) in self.players.iter().enumerate() {
@@ -223,6 +235,7 @@ impl Game {
                     round: self.curr_round.unwrap(),
                     drawing_suggestion:
                         round.get_drawing_suggestion(&p.client.client_uuid).unwrap().clone(),
+                    imprint: round.get_imprint(&p.client.client_uuid).map(|i| (*i).clone()),
                 }
             )
         }
@@ -250,14 +263,13 @@ impl Game {
     fn send_voting_ballots(&self) {
         let round = self.get_current_round().unwrap();
         let drawings = round.get_data();
-
         let full_ballot: HashMap<&Uuid, BallotItem> =
             drawings.iter().map(|(player_id, round_data)| {
                 info!("Collecting ballot for client_id: {}", player_id);
                 let b = BallotItem {
                     id: round_data.drawing_id.clone(),
                     suggestion: round_data.drawing_suggestion.clone(),
-                    drawing: round_data.drawing.clone().expect("drawing should exist"),
+                    drawing: round_data.drawing.as_ref().map(|d| (**d).clone()).expect("Drawing should exist"),
                 };
                 (player_id, b)
             }).collect();

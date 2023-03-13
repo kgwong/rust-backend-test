@@ -2,7 +2,7 @@ use actix::prelude::*;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
-use log::{info, error};
+use log::{info};
 
 use crate::websocket::*;
 

@@ -1,7 +1,5 @@
 use std::{fs, io::Read};
 
-use serde::Deserialize;
-
 use rand::seq::SliceRandom;
 
 //TODO add type param

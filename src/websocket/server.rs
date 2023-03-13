@@ -1,8 +1,6 @@
 use actix::prelude::*;
 use std::{net, rc::Rc};
 
-use log::info;
-
 use crate::{api::*, game::game_manager, client_session::ClientSession};
 
 use uuid::Uuid;
@@ -20,7 +18,7 @@ impl<T: Message> Message for ClientRequestWrapper<T> {
 }
 
 pub struct GameServer {
-    gm: game_manager::GameManager
+    gm: game_manager::GameManager,
 }
 
 
@@ -58,7 +56,7 @@ impl Handler<ClientRequestWrapper<create_game::Request>> for GameServer {
                         create_game::Response{}
                     )
                 ),
-            Err(e) =>
+            Err(_) =>
                 MessageResult(
                     response::GenericResponse::ServerError("create_game error TODO".to_string())
                 ),

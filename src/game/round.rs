@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use log::info;
 use uuid::Uuid;
 
-use super::{drawing::Drawing, deck::Deck};
+use super::{drawing::Drawing, deck::Deck, imprint_mapper};
 
 
 // TODO: this struct doesn't really make sense
@@ -11,24 +11,31 @@ use super::{drawing::Drawing, deck::Deck};
 pub struct RoundDataPerPlayer {
     pub drawing_id: Uuid,
     pub drawing_suggestion: String,
-    pub drawing: Option<Drawing>,
+    pub imprint: Option<Rc<Drawing>>,
+    pub drawing: Option<Rc<Drawing>>,
     pub has_voted: bool,
     pub votes: i32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Round {
-    pub round_data_per_player: HashMap<Uuid, RoundDataPerPlayer>,
+    round_data_per_player: HashMap<Uuid, RoundDataPerPlayer>,
 }
 
 impl Round {
-    pub fn new(client_ids: Vec<Uuid>, suggestion_deck: &mut Deck) -> Round {
+    pub fn new(
+        client_ids: Vec<Uuid>,
+        suggestion_deck: &mut Deck,
+        imprint_map: &HashMap<Uuid, Option<Rc<Drawing>>>
+    ) -> Round {
+        let selected_imprints = imprint_mapper::random(imprint_map);
         Round {
             round_data_per_player:
                 client_ids.into_iter().map(|id|
                     (id, RoundDataPerPlayer{
                         drawing_id: Uuid::new_v4(),
                         drawing_suggestion: suggestion_deck.draw_card().unwrap(),
+                        imprint: selected_imprints.get(&id).and_then(|x| x.clone()),
                         drawing: None,
                         has_voted: false,
                         votes: 0,
@@ -45,12 +52,15 @@ impl Round {
         self.round_data_per_player.get(client_id).map(|data| &data.drawing_suggestion)
     }
 
-    pub fn get_drawing(&self, client_id: &Uuid) -> &Option<Drawing> {
-        // TODO: this is fatal, probably don't crash the server tho
-        &self.round_data_per_player.get(client_id).unwrap().drawing
+    pub fn get_imprint(&self, client_id: &Uuid) -> Option<Rc<Drawing>> {
+        self.round_data_per_player.get(client_id).map(|i| i.imprint.clone()).flatten()
     }
 
-    pub fn set_drawing(&mut self, client_id: &Uuid, drawing: Drawing) {
+    pub fn get_drawing(&self, client_id: &Uuid) -> Option<Rc<Drawing>> {
+        self.round_data_per_player.get(client_id).map(|s| s.drawing.clone()).flatten()
+    }
+
+    pub fn set_drawing(&mut self, client_id: &Uuid, drawing: Rc<Drawing>) {
         info!("set_drawing client_id: {}", client_id);
         let player_data = self.round_data_per_player.get_mut(client_id).unwrap();
         player_data.drawing = Some(drawing);

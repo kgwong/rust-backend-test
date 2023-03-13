@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use log::{info, trace};
+use log::{trace};
 use uuid::Uuid;
 
 use crate::game::{drawing::Drawing,game::{Game, JoinGameError}, room_code_generator::RoomCodeGenerator};

@@ -1,9 +1,9 @@
 use std::{net};
 
-use actix::{Actor, StreamHandler, Addr, WrapFuture, ActorFutureExt, fut, ContextFutureSpawner, Message, AsyncContext, Handler, Context};
+use actix::*;
 use actix_web_actors::ws;
 
-use log::{info, error};
+use log::{info};
 
 use serde_json::{Value};
 
@@ -41,19 +41,19 @@ impl ClientSession {
 impl Actor for ClientSession {
     type Context = ws::WebsocketContext<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
-        info!("New connection");
+    fn started(&mut self, _: &mut Self::Context) {
+        info!("New connection {} from {}", self.uuid, self.peer_addr);
     }
 
-    fn stopped(&mut self, _ctx: &mut Self::Context) {
-        info!("Connection closed");
+    fn stopped(&mut self, _: &mut Self::Context) {
+        info!("Connection closed {}", self.uuid);
     }
 }
 
 /// Handler for ws::Message message
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        info!("Message Received: {:?}", msg);
+        info!("Message Received from {}: {:?}", self.uuid, msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
@@ -137,10 +137,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                                     });
                                 l.wait(ctx);
                             }
-
                             _ => info!("Unknown message {}", message_name)
                         }
-
                     },
                     _ => info!("failure")
                 }
