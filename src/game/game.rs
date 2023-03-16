@@ -1,6 +1,6 @@
 use std::{rc::Rc, fs::File, collections::HashMap};
 
-use log::{info, error};
+use log::{info, error, debug};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
@@ -9,7 +9,7 @@ use crate::{player::PlayerClient, api::{
         game_update::{GameUpdate, ClientInfo},
         drawing_parameters::DrawingParameters,
         voting_ballot::{BallotItem, VotingBallot}}}};
-use super::{player_view::Player, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector};
+use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector};
 
 #[derive(Debug)]
 pub struct JoinGameError;
@@ -99,7 +99,8 @@ impl Game{
 
     pub fn set_player_ready(&mut self, client_id: Uuid, ready_state: bool) -> Result<(), ()> {
         if let Some(player) = self.players.iter_mut().find(|p| p.client.client_uuid == client_id){
-            player.ready_state = ready_state;
+            let state = match ready_state { true => PlayerState::Ready, false => PlayerState::NotReady };
+            player.state = state;
             self.broadcast_update();
             Ok(())
         } else {
@@ -113,42 +114,54 @@ impl Game{
             return Err(());
         }
 
-        let round = self.get_current_round_mut().ok_or(())?;
-        if let Some(_) = round.get_drawing(&client_id) {
-            error!("Drawing already Exists");
-            return Err(()) //TODO drawing already exist
+        {
+            let round = self.get_current_round_mut().ok_or(())?;
+            if let Some(_) = round.get_drawing(&client_id) {
+                error!("Drawing already Exists");
+                return Err(()) //TODO drawing already exist
+            }
+
+            round.set_drawing(&client_id, Rc::new(drawing));
         }
 
-        round.set_drawing(&client_id, Rc::new(drawing));
+        self.set_player_state(&client_id, PlayerState::DrawingDone);
+
+        let round = self.get_current_round().ok_or(())?;
         if round.is_done_drawing() {
             self.send_voting_ballots();
             self.state = GameState::VotingPhase;
+            for player in self.players.iter_mut() {
+                player.state = PlayerState::Voting;
+            }
             self.broadcast_update()
         }
         Ok(())
     }
 
     pub fn submit_vote(&mut self, client_id: Uuid, votes: HashMap<Uuid, i32>) -> Result<(), ()>{
-        let mut scores = None;
+        {
+            let round = self.get_current_round_mut().ok_or(())?;
+            round.submit_vote(&client_id, votes);
+        }
+        self.set_player_state(&client_id, PlayerState::VotingDone);
 
-        let round = self.get_current_round_mut().ok_or(())?;
-        round.submit_vote(&client_id, votes);
-        if round.is_done_voting() {
-            scores = Some(round.get_scores());
-        } else {
+        let round = self.get_current_round().ok_or(())?;
+        if !round.is_done_voting() {
             return Ok(())
         }
 
-        if let Some(s) = scores {
-            self.add_to_score(&s);
+        let scores = round.get_scores();
+        self.add_to_score(&scores);
 
-            // this is the last round, go to results
-            if self.curr_round == Some(self.num_rounds) {
-                self.state = GameState::Results;
-                self.broadcast_update();
-            } else {
-                self.start_next_round();
+        // this is the last round, go to results
+        if self.curr_round == Some(self.num_rounds) {
+            self.state = GameState::Results;
+            for player in self.players.iter_mut(){
+                player.state = PlayerState::NotReady;
             }
+            self.broadcast_update();
+        } else {
+            self.start_next_round();
         }
         Ok(())
     }
@@ -204,6 +217,10 @@ impl Game{
             ));
 
         self.state = GameState::DrawingPhase;
+        for player in self.players.iter_mut() {
+            player.state = PlayerState::Drawing
+        }
+
         self.broadcast_update();
         self.send_drawing_parameters();
     }
@@ -215,6 +232,13 @@ impl Game{
             player.score += *points;
         }
     }
+
+    fn set_player_state(&mut self, client_id: &Uuid, state: PlayerState) {
+        debug!("Setting PlayerState {} {:?}", client_id, state);
+        self.players.iter_mut().find(|p| p.client.client_uuid == *client_id).expect("id").state = state;
+        self.broadcast_update()
+    }
+
 }
 
 // Messaging
