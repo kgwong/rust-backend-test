@@ -1,9 +1,16 @@
 use actix::prelude::*;
+use log::info;
 use std::{net, rc::Rc};
 
 use crate::{api::*, game::game_manager, client_session::ClientSession};
 
 use uuid::Uuid;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct ClientDisconnectMessage{
+    pub uuid: Uuid,
+}
 
 #[derive(Debug)]
 pub struct ClientRequestWrapper<T: Message>{
@@ -163,5 +170,20 @@ impl Handler<ClientRequestWrapper<submit_vote::Request>> for GameServer {
                 MessageResult(
                     response::GenericResponse::ClientError("failed".to_string())),
         }
+    }
+}
+
+
+impl Handler<ClientDisconnectMessage> for GameServer {
+    type Result = MessageResult<ClientDisconnectMessage>;
+
+    fn handle(
+        &mut self,
+        msg: ClientDisconnectMessage,
+        _ctx: &mut Context<Self>)
+    -> Self::Result {
+        let uuid = msg.uuid;
+        info!("Received client disconnect: {}", uuid);
+        MessageResult(())
     }
 }

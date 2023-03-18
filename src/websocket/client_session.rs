@@ -9,6 +9,7 @@ use serde_json::{Value};
 
 use crate::api::server_messages::*;
 use crate::server::{self, ClientRequestWrapper};
+use crate::websocket::server::ClientDisconnectMessage;
 
 use uuid::Uuid;
 
@@ -46,6 +47,10 @@ impl Actor for ClientSession {
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
+        self.server
+            .do_send(ClientDisconnectMessage{
+                uuid: self.uuid
+            });
         info!("Connection closed {}", self.uuid);
     }
 }
