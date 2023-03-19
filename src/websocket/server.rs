@@ -6,6 +6,8 @@ use crate::{api::*, game::game_manager, client_session::ClientSession};
 
 use uuid::Uuid;
 
+use super::client_connection::ClientConnection;
+
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct ClientDisconnectMessage{
@@ -50,12 +52,13 @@ impl Handler<ClientRequestWrapper<create_game::Request>> for GameServer {
         _ctx: &mut Context<Self>)
     -> Self::Result {
         let resp = self.gm.create_game(
-            Rc::new(crate::player::PlayerClient{
-                client_uuid: msg.client_uuid,
-                peer_addr: msg.peer_addr,
-                client_addr: msg.client_addr,
-                name: msg.req.host_name
-            }));
+            Rc::new(
+                ClientConnection{
+                    id: msg.client_uuid,
+                    peer_addr: msg.peer_addr,
+                    actor_addr: msg.client_addr,
+                }),
+            msg.req.host_player_name);
         match resp {
             Ok(_) =>
                 MessageResult(
@@ -79,13 +82,13 @@ impl Handler<ClientRequestWrapper<join_game::Request>> for GameServer {
         msg: ClientRequestWrapper<join_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        let player = Rc::new(crate::player::PlayerClient{
-            client_uuid: msg.client_uuid,
-            peer_addr: msg.peer_addr,
-            client_addr: msg.client_addr,
-            name: msg.req.player_name
+        let player_connection = Rc::new(
+            ClientConnection{
+                id: msg.client_uuid,
+                peer_addr: msg.peer_addr,
+                actor_addr: msg.client_addr,
         });
-        match self.gm.join_game(player, &msg.req.room_code) {
+        match self.gm.join_game(player_connection, &msg.req.room_code, &msg.req.player_name) {
             Ok(_) =>
                 MessageResult(
                     response::GenericResponse::Ok(join_game::Response{})),
@@ -104,7 +107,7 @@ impl Handler<ClientRequestWrapper<start_game::Request>> for GameServer {
         msg: ClientRequestWrapper<start_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.start_game(msg.client_uuid) {
+        match self.gm.start_game(&msg.client_uuid) {
             Ok(_) =>
                 MessageResult(
                     response::GenericResponse::Ok(start_game::Response{})),
@@ -123,7 +126,7 @@ impl Handler<ClientRequestWrapper<set_player_ready::Request>> for GameServer {
         msg: ClientRequestWrapper<set_player_ready::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.set_player_ready(msg.client_uuid, msg.req.ready_state) {
+        match self.gm.set_player_ready(&msg.client_uuid, msg.req.ready_state) {
             Ok(_) =>
                 MessageResult(
                     response::GenericResponse::Ok(set_player_ready::Response{})),
@@ -143,7 +146,7 @@ impl Handler<ClientRequestWrapper<submit_drawing::Request>> for GameServer {
         msg: ClientRequestWrapper<submit_drawing::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.submit_drawing(msg.client_uuid, msg.req.drawing, msg.req.round) {
+        match self.gm.submit_drawing(&msg.client_uuid, msg.req.drawing, msg.req.round) {
             Ok(_) =>
                 MessageResult(
                     response::GenericResponse::Ok(submit_drawing::Response{})),
@@ -162,7 +165,7 @@ impl Handler<ClientRequestWrapper<submit_vote::Request>> for GameServer {
         msg: ClientRequestWrapper<submit_vote::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.vote(msg.client_uuid, msg.req.votes) {
+        match self.gm.vote(&msg.client_uuid, msg.req.votes) {
             Ok(_) =>
                 MessageResult(
                     response::GenericResponse::Ok(submit_vote::Response{})),

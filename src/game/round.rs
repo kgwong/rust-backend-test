@@ -24,15 +24,15 @@ pub struct Round {
 
 impl Round {
     pub fn new(
-        client_ids: Vec<Uuid>,
+        client_ids: Vec<&Uuid>,
         suggestion_deck: &mut Deck,
         imprint_map: &HashMap<Uuid, Option<Rc<Drawing>>>
     ) -> Round {
         let selected_imprints = imprint_mapper::random(imprint_map);
         Round {
             round_data_per_player:
-                client_ids.into_iter().map(|id|
-                    (id, RoundDataPerPlayer{
+                client_ids.iter().map(|id|
+                    (*id.clone(), RoundDataPerPlayer{
                         drawing_id: Uuid::new_v4(),
                         drawing_suggestion: suggestion_deck.draw_card().unwrap(),
                         imprint: selected_imprints.get(&id).and_then(|x| x.clone()),

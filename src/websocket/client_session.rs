@@ -161,12 +161,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
 
 
 
-impl Handler<game_update::GameUpdate> for ClientSession {
+impl Handler<lobby_update::LobbyUpdate> for ClientSession {
     type Result = ();
 
     fn handle(
         &mut self,
-        msg: game_update::GameUpdate,
+        msg: lobby_update::LobbyUpdate,
         ctx: &mut Self::Context)
     -> Self::Result {
         ctx.text(serde_json::to_string(&msg).expect("oops"));

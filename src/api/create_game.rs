@@ -11,7 +11,7 @@ pub struct Response {
 #[derive(Serialize, Deserialize, Debug, Message)]
 #[rtype(result = "GenericResponse<Response>")]
 pub struct Request {
-    pub host_name: String,
+    pub host_player_name: String,
 }
 
 impl TMessageName for Response{

@@ -1,12 +1,12 @@
 use std::{rc::Rc, fs::File, collections::HashMap};
 
-use log::{info, error, debug};
+use log::{info, error, debug, warn};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-use crate::{player::PlayerClient, api::{
+use crate::{client_connection::ClientConnection, api::{
     server_messages::{
-        game_update::{GameUpdate, ClientInfo},
+        lobby_update::{LobbyUpdate},
         drawing_parameters::DrawingParameters,
         voting_ballot::{BallotItem, VotingBallot}}}};
 use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector};
@@ -33,22 +33,36 @@ pub enum GameState{
 pub struct Game{
     room_code: String,
     state: GameState,
-    players: Vec<Player>,
+
+    last_player_number: usize,
+    host_id: Uuid,
+    players: HashMap<Uuid, Player>,
+
     curr_round: Option<usize>, // 1-indexed
     rounds: Vec<Round>,
     num_rounds: usize,
 
     drawing_suggestions_deck: Deck<>,
+
 }
 
 // Public API
 impl Game{
 
-    pub fn new(room_code: String, host_player: Rc<PlayerClient>) -> Self {
+    pub fn new(
+        room_code: String,
+        host_player_client_connection: Rc<ClientConnection>,
+        host_player_name: String
+    ) -> Self {
         Game {
             room_code: room_code,
             state: GameState::WaitingForPlayers,
-            players: std::vec![Player::new(host_player)],
+            last_player_number: 0,
+            host_id: host_player_client_connection.id.clone(),
+            players: HashMap::from([(
+                host_player_client_connection.id,
+                Player::new(host_player_client_connection, host_player_name, 0)
+            )]),
             curr_round: None,
             rounds: std::vec![],
             num_rounds: 5,
@@ -57,7 +71,11 @@ impl Game{
         }
     }
 
-    pub fn add_player(&mut self, player: Rc<PlayerClient>) -> Result<(), JoinGameError> {
+    pub fn add_player(
+        &mut self,
+        client_connection: Rc<ClientConnection>,
+        proposed_name: &str
+    ) -> Result<(), JoinGameError> {
         if self.players.len() == MAX_PLAYERS {
             return Err(JoinGameError);
         }
@@ -65,23 +83,41 @@ impl Game{
             return Err(JoinGameError)
         }
 
-        //TODO clean this up
-        let resolved_player = Rc::new(PlayerClient{
-            client_uuid: player.client_uuid,
-            peer_addr: player.peer_addr,
-            client_addr: player.client_addr.clone(),
-            name: self.resolve_name(&player),
-        });
+        self.last_player_number += 1;
+        let player = Player::new(client_connection, self.resolve_name(proposed_name), self.last_player_number);
+        self.players.insert(player.client.id, player);
 
-        // TODO: move name out of player client
-        self.players.push(Player::new(resolved_player));
         info!("CurrentPlayers: {:?}", self.players);
         self.broadcast_update();
         return Ok(());
     }
 
+    /***
+     * Completely removes a player if the game isn't in progress. If
+     * the game has started, set their state to disconnected so
+     * that they may reconnect
+     */
+    pub fn disconnect_player(&mut self, client_id: &Uuid) {
+        if self.is_host(client_id) {
+            // TODO
+        }
+        match self.state {
+            GameState::WaitingForPlayers | GameState::Results => {
+                if let Some(player) = self.players.remove(client_id) {
+                    info!("Removing {} from game", player.name);
+                } else {
+                    warn!("Player {} does not exist in game", client_id);
+                }
+            }
+            GameState::DrawingPhase | GameState::VotingPhase => {
+                info!("TODO set disconnect state")
+            },
+        }
+        self.broadcast_update();
+    }
+
     pub fn start_game(&mut self, client_id: Uuid) -> Result<(), StartGameError> {
-        if self.players[0].client.client_uuid == client_id {
+        if self.is_host(&client_id) {
             if self.state != GameState::WaitingForPlayers {
                 return Err(StartGameError);
             }
@@ -97,8 +133,8 @@ impl Game{
         }
     }
 
-    pub fn set_player_ready(&mut self, client_id: Uuid, ready_state: bool) -> Result<(), ()> {
-        if let Some(player) = self.players.iter_mut().find(|p| p.client.client_uuid == client_id){
+    pub fn set_player_ready(&mut self, client_id: &Uuid, ready_state: bool) -> Result<(), ()> {
+        if let Some(player) = self.players.get_mut(client_id){
             let state = match ready_state { true => PlayerState::Ready, false => PlayerState::NotReady };
             player.state = state;
             self.broadcast_update();
@@ -108,7 +144,7 @@ impl Game{
         }
     }
 
-    pub fn submit_drawing(&mut self, client_id: Uuid, drawing: Drawing, round: usize) -> Result<(), ()> {
+    pub fn submit_drawing(&mut self, client_id: &Uuid, drawing: Drawing, round: usize) -> Result<(), ()> {
         if self.curr_round != Some(round) {
             error!("Not Current Round: curr_round: {}, round {}", self.curr_round.unwrap(), round);
             return Err(());
@@ -130,7 +166,7 @@ impl Game{
         if round.is_done_drawing() {
             self.send_voting_ballots();
             self.state = GameState::VotingPhase;
-            for player in self.players.iter_mut() {
+            for player in self.players.values_mut() {
                 player.state = PlayerState::Voting;
             }
             self.broadcast_update()
@@ -138,7 +174,7 @@ impl Game{
         Ok(())
     }
 
-    pub fn submit_vote(&mut self, client_id: Uuid, votes: HashMap<Uuid, i32>) -> Result<(), ()>{
+    pub fn submit_vote(&mut self, client_id: &Uuid, votes: HashMap<Uuid, i32>) -> Result<(), ()>{
         {
             let round = self.get_current_round_mut().ok_or(())?;
             round.submit_vote(&client_id, votes);
@@ -156,7 +192,7 @@ impl Game{
         // this is the last round, go to results
         if self.curr_round == Some(self.num_rounds) {
             self.state = GameState::Results;
-            for player in self.players.iter_mut(){
+            for player in self.players.values_mut(){
                 player.state = PlayerState::NotReady;
             }
             self.broadcast_update();
@@ -170,23 +206,30 @@ impl Game{
 }
 
 impl Game{
+    fn is_host(&self, client_id: &Uuid) -> bool {
+        *client_id == self.host_id
+    }
+
+
+    fn get_eldest_player_id(&self) -> &Uuid {
+        let (_, eldest_player) = self.players.iter().min_by(
+            |(_, p1), (_, p2)| p1.number.cmp(&p2.number)
+            ).expect("should always have players");
+        &eldest_player.client.id
+    }
+
     /**
      *  Returns a new name in the form of `name(1)` if it's a duplicate of an existing name
      */
-    fn resolve_name(&self, player: &PlayerClient) -> String {
-        let trimmed_name = player.name.trim();
-        let mut proposed_name = trimmed_name.to_string();
+    fn resolve_name(&self, proposed_name: &str) -> String {
+        let trimmed_name = proposed_name.trim();
+        let mut best_name = trimmed_name.to_string();
         let mut count = 1;
-        while self.players.iter().any(|p| p.client.name == proposed_name) {
-            proposed_name = format!("{}({})", trimmed_name, count);
+        while self.players.values().any(|p| p.name == best_name) {
+            best_name = format!("{}({})", trimmed_name, count);
             count += 1;
         }
-        proposed_name
-    }
-
-    // TODO: shouldn't need to copy these
-    fn get_client_ids(&self) -> Vec<Uuid> {
-        self.players.iter().map(|p| p.client.client_uuid).collect()
+        best_name
     }
 
     fn get_current_round_mut(&mut self) -> Option<&mut Round> {
@@ -209,15 +252,16 @@ impl Game{
         }
 
         self.curr_round = Some(self.curr_round.map_or(1, |v| v + 1));
+        let player_ids: Vec<&Uuid> = self.players.keys().collect();
         self.rounds.push(
             Round::new(
-                self.get_client_ids(),
+                player_ids,
                 &mut self.drawing_suggestions_deck,
                 &imprint_map,
             ));
 
         self.state = GameState::DrawingPhase;
-        for player in self.players.iter_mut() {
+        for player in self.players.values_mut() {
             player.state = PlayerState::Drawing
         }
 
@@ -226,16 +270,16 @@ impl Game{
     }
 
     fn add_to_score(&mut self, scores: &HashMap<Uuid, i32>) {
-        // TODO: this is silly
-        for (player_id, points) in scores.iter(){
-            let player = self.players.iter_mut().find(|p| p.client.client_uuid == *player_id).unwrap();
-            player.score += *points;
+        for (id, player) in self.players.iter_mut() {
+            if let Some(score) = scores.get(id) {
+                player.score += score
+            }
         }
     }
 
     fn set_player_state(&mut self, client_id: &Uuid, state: PlayerState) {
         debug!("Setting PlayerState {} {:?}", client_id, state);
-        self.players.iter_mut().find(|p| p.client.client_uuid == *client_id).expect("id").state = state;
+        self.players.get_mut(client_id).expect("player should exist").state = state;
         self.broadcast_update()
     }
 
@@ -245,42 +289,40 @@ impl Game{
 impl Game{
     pub fn broadcast_update(&self) {
         info!("Broadcasting update to all players");
-        for (i, p) in self.players.iter().enumerate() {
-            self.send_game_view_to_player(&p.client, i);
+        for player in self.players.values() {
+            self.send_game_view_to_player(&player.client);
         }
     }
 
     pub fn send_drawing_parameters(&self) {
         let round = self.get_current_round().unwrap();
-        for p in self.players.iter() {
-            p.client.client_addr.do_send(
+        for p in self.players.values() {
+            p.client.actor_addr.do_send(
                 DrawingParameters {
                     message_name: "drawing_parameters".to_string(),
                     round: self.curr_round.unwrap(),
                     drawing_suggestion:
-                        round.get_drawing_suggestion(&p.client.client_uuid).unwrap().clone(),
-                    imprint: round.get_imprint(&p.client.client_uuid).map(|i| (*i).clone()),
+                        round.get_drawing_suggestion(&p.client.id).unwrap().clone(),
+                    imprint: round.get_imprint(&p.client.id).map(|i| (*i).clone()),
                 }
             )
         }
 
     }
 
-    fn current_game_view(&self, client_info: ClientInfo) -> GameUpdate {
-        GameUpdate {
-            message_name: "game_update".to_string(),
-            room_code: self.room_code.clone(),
-            state: self.state.clone(),
-            round: self.curr_round,
-            num_rounds: self.num_rounds,
-            players: self.players.iter().map(|p| p.to_view()).collect(),
-            client_info: client_info,
-        }
-    }
-
-    fn send_game_view_to_player(&self, player: &PlayerClient, index: usize) {
-        player.client_addr.do_send(
-            self.current_game_view(ClientInfo{player_index: index})
+    fn send_game_view_to_player(&self, client_connection: &ClientConnection) {
+        client_connection.actor_addr.do_send(
+            LobbyUpdate {
+                message_name: "lobby_update".to_string(),
+                room_code: self.room_code.clone(),
+                state: self.state.clone(),
+                round: self.curr_round,
+                num_rounds: self.num_rounds,
+                players: self.players.iter().map(
+                    |(id, p)|
+                        p.to_view(self.is_host(id), *id == client_connection.id)
+                ).collect(),
+            }
         );
     }
 
@@ -298,12 +340,15 @@ impl Game{
                 (player_id, b)
             }).collect();
 
-        for p in self.players.iter() {
+        for p in self.players.values() {
             self.send_voting_ballots_to_player(&p.client, &full_ballot);
         }
     }
 
-    fn send_voting_ballots_to_player(&self, player: &PlayerClient, full_ballot: &HashMap<&Uuid, BallotItem>) {
+    fn send_voting_ballots_to_player(
+        &self,
+        client_connection: &ClientConnection,
+        full_ballot: &HashMap<&Uuid, BallotItem>) {
         // Send all the ballot items except the players own drawing
         //let ballot: Vec<BallotItem> = full_ballot.into_iter()
         //    .filter(|(player_id, _)| player.client_uuid != **player_id)
@@ -315,7 +360,7 @@ impl Game{
         let ballot: Vec<BallotItem> = full_ballot.iter()
                 .map(|(_, ballot_item)| (*ballot_item).clone())
                 .collect();
-        player.client_addr.do_send(VotingBallot {
+        client_connection.actor_addr.do_send(VotingBallot {
             message_name: "voting_ballot".to_string(),
             round: self.curr_round.unwrap(),
             ballot: ballot,

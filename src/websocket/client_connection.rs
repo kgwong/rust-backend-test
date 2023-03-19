@@ -7,9 +7,10 @@ use crate::client_session::ClientSession;
 
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PlayerClient{
-    pub client_uuid: Uuid,
+pub struct ClientConnection{
+    pub id: Uuid,
+    // Address to the client host
     pub peer_addr: net::SocketAddr,
-    pub client_addr: Addr<ClientSession>,
-    pub name: String,
+    // Actix address to the ClientSession actor
+    pub actor_addr: Addr<ClientSession>,
 }
