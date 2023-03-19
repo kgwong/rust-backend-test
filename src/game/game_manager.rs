@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use log::{trace, warn};
+use log::{trace, warn, info};
 use uuid::Uuid;
 
 use crate::game::{drawing::Drawing,game::{Game, JoinGameError}, room_code_generator::RoomCodeGenerator};
@@ -56,7 +56,7 @@ impl GameManager {
         game.broadcast_update();
         self.games_by_room_code.insert(room_code.clone(), game);
         self.room_code_by_client_id.insert(client_connection.id, room_code.clone());
-        trace!("Games: {:?}", self.games_by_room_code);
+        info!("# of games: {}", self.games_by_room_code.len());
         Ok(room_code)
     }
 
@@ -101,13 +101,21 @@ impl GameManager {
     }
 
     pub fn remove_player_connection(&mut self, client_id: &Uuid) {
-        if let Some(game) = self.get_game_mut(client_id) {
-            game.disconnect_player(client_id);
+        if let Some(room_code) = self.room_code_by_client_id.remove(client_id) {
+            {
+                let game = self.games_by_room_code.get_mut(&room_code).expect("game should exist");
+                game.disconnect_player(client_id)
+            }
+            {
+                let game = self.games_by_room_code.get(&room_code).expect("game should exist");
+                if game.all_players_disconnected() {
+                    self.games_by_room_code.remove(&room_code);
+                    info!("# of games: {}", self.games_by_room_code.len())
+                }
+            }
         } else {
             warn!("Player was not connnected to a game: {}", client_id)
         }
-
-        self.room_code_by_client_id.remove(client_id);
     }
 
     fn is_already_in_a_game(&self, client_id: &Uuid) -> bool {

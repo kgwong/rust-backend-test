@@ -98,13 +98,13 @@ impl Game{
      * that they may reconnect
      */
     pub fn disconnect_player(&mut self, client_id: &Uuid) {
-        if self.is_host(client_id) {
-            // TODO
-        }
         match self.state {
             GameState::WaitingForPlayers | GameState::Results => {
                 if let Some(player) = self.players.remove(client_id) {
                     info!("Removing {} from game", player.name);
+                    if self.is_host(client_id) && !self.all_players_disconnected(){
+                        self.host_id = self.get_eldest_player_id().clone();
+                    }
                 } else {
                     warn!("Player {} does not exist in game", client_id);
                 }
@@ -114,6 +114,13 @@ impl Game{
             },
         }
         self.broadcast_update();
+    }
+
+    pub fn all_players_disconnected(&self) -> bool {
+        for (id, player) in self.players.iter() {
+            return false
+        }
+        true
     }
 
     pub fn start_game(&mut self, client_id: Uuid) -> Result<(), StartGameError> {

@@ -13,8 +13,10 @@ use crate::websocket::server::ClientDisconnectMessage;
 
 use uuid::Uuid;
 
+use super::client_connection::ClientConnection;
+
 pub struct ClientSession{
-    uuid: Uuid,
+    id: Uuid,
     server: Addr<server::GameServer>,
     peer_addr: net::SocketAddr,
 
@@ -23,7 +25,7 @@ pub struct ClientSession{
 impl ClientSession {
     pub fn new(server: Addr<server::GameServer>, peer_addr: net::SocketAddr) -> Self {
         ClientSession {
-            uuid: Uuid::new_v4(),
+            id: Uuid::new_v4(),
             server,
             peer_addr,
         }
@@ -31,10 +33,12 @@ impl ClientSession {
 
     fn wrap_request<T: Message>(&self, req: T, ctx: &ws::WebsocketContext<Self>) -> server::ClientRequestWrapper<T> {
         ClientRequestWrapper{
-            client_uuid: self.uuid,
-            peer_addr: self.peer_addr,
+            client_connection: ClientConnection {
+                id: self.id,
+                peer_addr: self.peer_addr,
+                actor_addr: ctx.address(),
+            },
             req: req,
-            client_addr: ctx.address(),
         }
     }
 }
@@ -43,22 +47,22 @@ impl Actor for ClientSession {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, _: &mut Self::Context) {
-        info!("New connection {} from {}", self.uuid, self.peer_addr);
+        info!("New connection {} from {}", self.id, self.peer_addr);
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
         self.server
             .do_send(ClientDisconnectMessage{
-                uuid: self.uuid
+                client_id: self.id
             });
-        info!("Connection closed {}", self.uuid);
+        info!("Connection closed {}", self.id);
     }
 }
 
 /// Handler for ws::Message message
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        info!("Message Received from {}: {:?}", self.uuid, msg);
+        info!("Message Received from {}: {:?}", self.id, msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
