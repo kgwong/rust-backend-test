@@ -1,4 +1,4 @@
-use std::{rc::Rc, fs::File, collections::HashMap};
+use std::{rc::Rc, fs::File, collections::HashMap, cell::RefCell};
 
 use log::{info, error, debug, warn};
 use serde::{Serialize, Deserialize};
@@ -36,7 +36,7 @@ pub struct Game{
 
     last_player_number: usize,
     host_id: Uuid,
-    players: HashMap<Uuid, Player>,
+    players: HashMap<Uuid, Rc<RefCell<Player>>>,
 
     curr_round: Option<usize>, // 1-indexed
     rounds: Vec<Round>,
@@ -61,7 +61,7 @@ impl Game{
             host_id: host_player_client_connection.id.clone(),
             players: HashMap::from([(
                 host_player_client_connection.id,
-                Player::new(host_player_client_connection, host_player_name, 0)
+                Rc::new(RefCell::new(Player::new(host_player_client_connection, host_player_name, 0)))
             )]),
             curr_round: None,
             rounds: std::vec![],
@@ -85,7 +85,7 @@ impl Game{
 
         self.last_player_number += 1;
         let player = Player::new(client_connection, self.resolve_name(proposed_name), self.last_player_number);
-        self.players.insert(player.client.id, player);
+        self.players.insert(player.client.id, Rc::new(RefCell::new(player)));
 
         info!("CurrentPlayers: {:?}", self.players);
         self.broadcast_update();
@@ -101,9 +101,9 @@ impl Game{
         match self.state {
             GameState::WaitingForPlayers | GameState::Results => {
                 if let Some(player) = self.players.remove(client_id) {
-                    info!("Removing {} from game", player.name);
-                    if self.is_host(client_id) && !self.all_players_disconnected(){
-                        self.host_id = self.get_eldest_player_id().clone();
+                    info!("Removing {} from game", player.borrow().name);
+                    if !self.all_players_disconnected() {
+                        self.update_host()
                     }
                 } else {
                     warn!("Player {} does not exist in game", client_id);
@@ -111,8 +111,15 @@ impl Game{
             }
             GameState::DrawingPhase | GameState::VotingPhase => {
                 if let Some(player) = self.players.get_mut(client_id) {
-                    player.is_disconnected = true
-                    // check round status
+                    player.borrow_mut().is_disconnected = true;
+                    if !self.all_players_disconnected() {
+                        self.update_host();
+                        if self.state == GameState::DrawingPhase {
+                            self.go_to_voting_phase_if_drawing_is_done();
+                        } else if self.state == GameState::VotingPhase {
+                            self.finish_round_if_voting_phase_is_done();
+                        }
+                    }
                 } else {
                     warn!("Player {} does not exist in game", client_id);
                 }
@@ -122,8 +129,10 @@ impl Game{
     }
 
     pub fn all_players_disconnected(&self) -> bool {
-        for (id, player) in self.players.iter() {
-            return false
+        for (_, player) in self.players.iter() {
+            if player.borrow_mut().is_disconnected == false {
+                return false
+            }
         }
         true
     }
@@ -137,6 +146,8 @@ impl Game{
                 return Err(StartGameError);
             }
             info!("Host is starting the game");
+            // TODO reset the deck on restart game
+            // TODO remove disconnected players on restart
             self.drawing_suggestions_deck.shuffle();
             self.start_next_round();
             Ok(())
@@ -148,7 +159,7 @@ impl Game{
     pub fn set_player_ready(&mut self, client_id: &Uuid, ready_state: bool) -> Result<(), ()> {
         if let Some(player) = self.players.get_mut(client_id){
             let state = match ready_state { true => PlayerState::Ready, false => PlayerState::NotReady };
-            player.state = state;
+            player.borrow_mut().state = state;
             self.broadcast_update();
             Ok(())
         } else {
@@ -173,16 +184,7 @@ impl Game{
         }
 
         self.set_player_state(&client_id, PlayerState::DrawingDone);
-
-        let round = self.get_current_round().ok_or(())?;
-        if round.is_done_drawing() {
-            self.send_voting_ballots();
-            self.state = GameState::VotingPhase;
-            for player in self.players.values_mut() {
-                player.state = PlayerState::Voting;
-            }
-            self.broadcast_update()
-        }
+        self.go_to_voting_phase_if_drawing_is_done();
         Ok(())
     }
 
@@ -192,25 +194,7 @@ impl Game{
             round.submit_vote(&client_id, votes);
         }
         self.set_player_state(&client_id, PlayerState::VotingDone);
-
-        let round = self.get_current_round().ok_or(())?;
-        if !round.is_done_voting() {
-            return Ok(())
-        }
-
-        let scores = round.get_scores();
-        self.add_to_score(&scores);
-
-        // this is the last round, go to results
-        if self.curr_round == Some(self.num_rounds) {
-            self.state = GameState::Results;
-            for player in self.players.values_mut(){
-                player.state = PlayerState::NotReady;
-            }
-            self.broadcast_update();
-        } else {
-            self.start_next_round();
-        }
+        self.finish_round_if_voting_phase_is_done();
         Ok(())
     }
 
@@ -222,12 +206,17 @@ impl Game{
         *client_id == self.host_id
     }
 
+    fn update_host(&mut self) {
+        self.host_id = self.get_eldest_connected_player_id().clone();
+    }
 
-    fn get_eldest_player_id(&self) -> &Uuid {
-        let (_, eldest_player) = self.players.iter().min_by(
-            |(_, p1), (_, p2)| p1.number.cmp(&p2.number)
-            ).expect("should always have players");
-        &eldest_player.client.id
+    fn get_eldest_connected_player_id(&self) -> Uuid {
+        let eldest_player = self.players.values()
+            .filter(|player| !player.borrow().is_disconnected)
+            .min_by(
+                |p1, p2| p1.borrow().number.cmp(&p2.borrow().number))
+            .expect("should always have players");
+        eldest_player.borrow().client.id
     }
 
     /**
@@ -237,7 +226,7 @@ impl Game{
         let trimmed_name = proposed_name.trim();
         let mut best_name = trimmed_name.to_string();
         let mut count = 1;
-        while self.players.values().any(|p| p.name == best_name) {
+        while self.players.values().any(|p| p.borrow().name == best_name) {
             best_name = format!("{}({})", trimmed_name, count);
             count += 1;
         }
@@ -252,46 +241,77 @@ impl Game{
         self.rounds.last()
     }
 
+    fn set_all_player_states(&mut self, state: PlayerState) {
+        for player in self.players.values_mut() {
+            player.borrow_mut().state = state;
+        }
+    }
+
     fn start_next_round(&mut self) {
         let mut imprint_map: HashMap<Uuid, Option<Rc<Drawing>>> = HashMap::new();
         if let Some(round) = self.get_current_round() {
             imprint_map = round.get_data().iter()
                 .map(|(player_id, data)| {
-                    let drawing: &Drawing = data.drawing.as_ref().unwrap();
-                    (player_id.clone(), Some(Rc::new(imprint_selector::random(drawing, 3))))
+                    let imprint = data.drawing.as_ref().map(
+                        |d| Rc::new(imprint_selector::random(d.as_ref(), 3)));
+                    (player_id.clone(), imprint)
                 })
                 .collect();
         }
 
         self.curr_round = Some(self.curr_round.map_or(1, |v| v + 1));
-        let player_ids: Vec<&Uuid> = self.players.keys().collect();
         self.rounds.push(
             Round::new(
-                player_ids,
+                self.players.clone(),
                 &mut self.drawing_suggestions_deck,
                 &imprint_map,
             ));
 
         self.state = GameState::DrawingPhase;
-        for player in self.players.values_mut() {
-            player.state = PlayerState::Drawing
-        }
-
+        self.set_all_player_states(PlayerState::Drawing);
         self.broadcast_update();
         self.send_drawing_parameters();
+    }
+
+    fn go_to_voting_phase_if_drawing_is_done(&mut self) {
+        let round = self.get_current_round().expect("round should exist");
+        if round.is_done_drawing() {
+            self.send_voting_ballots();
+            self.state = GameState::VotingPhase;
+            self.set_all_player_states(PlayerState::Voting);
+            self.broadcast_update()
+        }
+    }
+
+    fn finish_round_if_voting_phase_is_done(&mut self) {
+        let round = self.get_current_round().expect("round should exist");
+        if round.is_done_voting() {
+        let scores = round.get_scores();
+            self.add_to_score(&scores);
+
+            // this is the last round, go to results
+            if self.curr_round == Some(self.num_rounds) {
+                self.state = GameState::Results;
+                self.set_all_player_states(PlayerState::NotReady);
+                self.broadcast_update();
+            } else {
+                self.start_next_round();
+            }
+        }
+
     }
 
     fn add_to_score(&mut self, scores: &HashMap<Uuid, i32>) {
         for (id, player) in self.players.iter_mut() {
             if let Some(score) = scores.get(id) {
-                player.score += score
+                player.borrow_mut().score += score
             }
         }
     }
 
     fn set_player_state(&mut self, client_id: &Uuid, state: PlayerState) {
         debug!("Setting PlayerState {} {:?}", client_id, state);
-        self.players.get_mut(client_id).expect("player should exist").state = state;
+        self.players.get_mut(client_id).expect("player should exist").borrow_mut().state = state;
         self.broadcast_update()
     }
 
@@ -302,20 +322,20 @@ impl Game{
     pub fn broadcast_update(&self) {
         info!("Broadcasting update to all players");
         for player in self.players.values() {
-            self.send_game_view_to_player(&player.client);
+            self.send_game_view_to_player(&player.borrow().client);
         }
     }
 
     pub fn send_drawing_parameters(&self) {
         let round = self.get_current_round().unwrap();
-        for p in self.players.values() {
-            p.client.actor_addr.do_send(
+        for player in self.players.values() {
+            player.borrow().client.actor_addr.do_send(
                 DrawingParameters {
                     message_name: "drawing_parameters".to_string(),
                     round: self.curr_round.unwrap(),
                     drawing_suggestion:
-                        round.get_drawing_suggestion(&p.client.id).unwrap().clone(),
-                    imprint: round.get_imprint(&p.client.id).map(|i| (*i).clone()),
+                        round.get_drawing_suggestion(&player.borrow().client.id).unwrap().clone(),
+                    imprint: round.get_imprint(&player.borrow().client.id).map(|i| (*i).clone()),
                 }
             )
         }
@@ -331,8 +351,8 @@ impl Game{
                 round: self.curr_round,
                 num_rounds: self.num_rounds,
                 players: self.players.iter().map(
-                    |(id, p)|
-                        p.to_view(self.is_host(id), *id == client_connection.id)
+                    |(id, player)|
+                        player.borrow().to_view(self.is_host(id), *id == client_connection.id)
                 ).collect(),
             }
         );
@@ -347,13 +367,13 @@ impl Game{
                 let b = BallotItem {
                     id: round_data.drawing_id.clone(),
                     suggestion: round_data.drawing_suggestion.clone(),
-                    drawing: round_data.drawing.as_ref().map(|d| (**d).clone()).expect("Drawing should exist"),
+                    drawing: round_data.drawing.as_ref().map(|d| (**d).clone()).unwrap_or_default(),
                 };
                 (player_id, b)
             }).collect();
 
-        for p in self.players.values() {
-            self.send_voting_ballots_to_player(&p.client, &full_ballot);
+        for player in self.players.values() {
+            self.send_voting_ballots_to_player(&player.borrow().client, &full_ballot);
         }
     }
 

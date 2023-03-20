@@ -1,9 +1,9 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
 use log::info;
 use uuid::Uuid;
 
-use super::{drawing::Drawing, deck::Deck, imprint_mapper};
+use super::{drawing::Drawing, deck::Deck, imprint_mapper, player_view::Player};
 
 
 // TODO: this struct doesn't really make sense
@@ -20,19 +20,21 @@ pub struct RoundDataPerPlayer {
 #[derive(Debug, Clone)]
 pub struct Round {
     round_data_per_player: HashMap<Uuid, RoundDataPerPlayer>,
+    players: HashMap<Uuid, Rc<RefCell<Player>>>,
 }
 
 impl Round {
     pub fn new(
-        client_ids: Vec<&Uuid>,
+        players: HashMap<Uuid, Rc<RefCell<Player>>>,
         suggestion_deck: &mut Deck,
-        imprint_map: &HashMap<Uuid, Option<Rc<Drawing>>>
+        imprint_map: &HashMap<Uuid, Option<Rc<Drawing>>>,
+
     ) -> Round {
         let selected_imprints = imprint_mapper::random(imprint_map);
         Round {
             round_data_per_player:
-                client_ids.iter().map(|id|
-                    (*id.clone(), RoundDataPerPlayer{
+                players.keys().map(|id|
+                    (id.clone(), RoundDataPerPlayer{
                         drawing_id: Uuid::new_v4(),
                         drawing_suggestion: suggestion_deck.draw_card().unwrap(),
                         imprint: selected_imprints.get(&id).and_then(|x| x.clone()),
@@ -41,6 +43,7 @@ impl Round {
                         votes: 0,
                     })
                 ).collect(),
+            players,
         }
     }
 
@@ -81,13 +84,29 @@ impl Round {
 
     }
 
+    /**
+     * Returns true if all connected players have submitting a drawing
+     */
     pub fn is_done_drawing(&self) -> bool {
         self.round_data_per_player.iter()
+            .filter(
+                |(player_id, _)| {
+                    let s = self.players.get(*player_id).expect("player list should be same");
+                    !s.borrow().is_disconnected
+                })
             .fold(true, |acc, (_, v)| acc && v.drawing.is_some())
     }
 
+    /**
+     * Returns true if all connected players have submitting a vote
+     */
     pub fn is_done_voting(&self) -> bool {
         self.round_data_per_player.iter()
+            .filter(
+                |(player_id, _)| {
+                    let s = self.players.get(*player_id).expect("player list should be same");
+                    !s.borrow().is_disconnected
+                })
             .fold(true, |acc, (_, v)| acc && v.has_voted)
     }
 
