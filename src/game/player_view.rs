@@ -24,6 +24,8 @@ pub struct PlayerView {
     pub is_host: bool,
     // the client receiving this corresponds to this player
     pub is_you: bool,
+    // if this player's client connection closed mid-game
+    pub is_disconnected: bool,
 }
 
 #[derive(Debug)]
@@ -34,6 +36,7 @@ pub struct Player{
     pub number: usize,
     pub state: PlayerState,
     pub score: i32,
+    pub is_disconnected: bool,
 }
 
 impl Player{
@@ -44,6 +47,7 @@ impl Player{
             number: number,
             state: PlayerState::NotReady,
             score: 0,
+            is_disconnected: false,
         }
     }
 
@@ -54,6 +58,7 @@ impl Player{
             score: self.score,
             is_host,
             is_you,
+            is_disconnected: self.is_disconnected,
         }
     }
 }

@@ -110,7 +110,12 @@ impl Game{
                 }
             }
             GameState::DrawingPhase | GameState::VotingPhase => {
-                info!("TODO set disconnect state")
+                if let Some(player) = self.players.get_mut(client_id) {
+                    player.is_disconnected = true
+                    // check round status
+                } else {
+                    warn!("Player {} does not exist in game", client_id);
+                }
             },
         }
         self.broadcast_update();
