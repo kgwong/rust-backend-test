@@ -8,7 +8,7 @@ use crate::{client_connection::ClientConnection, api::{
     server_messages::{
         lobby_update::{LobbyUpdate},
         drawing_parameters::DrawingParameters,
-        voting_ballot::{BallotItem, VotingBallot}}}};
+        voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}}}};
 use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector};
 
 #[derive(Debug)]
@@ -360,10 +360,9 @@ impl Game{
 
     fn send_voting_ballots(&self) {
         let round = self.get_current_round().unwrap();
-        let drawings = round.get_data();
+        let data = round.get_data();
         let full_ballot: HashMap<&Uuid, BallotItem> =
-            drawings.iter().map(|(player_id, round_data)| {
-                info!("Collecting ballot for client_id: {}", player_id);
+            data.iter().map(|(player_id, round_data)| {
                 let b = BallotItem {
                     id: round_data.drawing_id.clone(),
                     suggestion: round_data.drawing_suggestion.clone(),
@@ -380,17 +379,14 @@ impl Game{
     fn send_voting_ballots_to_player(
         &self,
         client_connection: &ClientConnection,
-        full_ballot: &HashMap<&Uuid, BallotItem>) {
-        // Send all the ballot items except the players own drawing
-        //let ballot: Vec<BallotItem> = full_ballot.into_iter()
-        //    .filter(|(player_id, _)| player.client_uuid != **player_id)
-        //    .map(|(player_id, ballot_item)| ballot_item)
-        //    .collect();
-
-        // Actually, send the whole ballot by
-        //let i: Vec<&BallotItem = full_ballot.iter().map(|(i, j)| j).collect();
-        let ballot: Vec<BallotItem> = full_ballot.iter()
-                .map(|(_, ballot_item)| (*ballot_item).clone())
+        full_ballot: &HashMap<&Uuid, BallotItem>
+    ) {
+        let ballot: Vec<VotableBallotItem> = full_ballot.iter()
+                .map(|(player_id, ballot_item)|
+                    VotableBallotItem{
+                        ballot_item: (*ballot_item).clone(),
+                        is_voting_enabled: **player_id != client_connection.id,
+                        } )
                 .collect();
         client_connection.actor_addr.do_send(VotingBallot {
             message_name: "voting_ballot".to_string(),
