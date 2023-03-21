@@ -252,8 +252,7 @@ impl Game{
         if let Some(round) = self.get_current_round() {
             imprint_map = round.get_data().iter()
                 .map(|(player_id, data)| {
-                    let imprint = data.drawing.as_ref().map(
-                        |d| Rc::new(imprint_selector::random(d.as_ref(), 3)));
+                    let imprint = imprint_selector::random(data.drawing.clone(), data.imprint.clone(), 3);
                     (player_id.clone(), imprint)
                 })
                 .collect();
@@ -367,6 +366,7 @@ impl Game{
                     id: round_data.drawing_id.clone(),
                     suggestion: round_data.drawing_suggestion.clone(),
                     drawing: round_data.drawing.as_ref().map(|d| (**d).clone()).unwrap_or_default(),
+                    imprint: round_data.imprint.as_ref().map(|i| (**i).clone()).unwrap_or_default(),
                 };
                 (player_id, b)
             }).collect();

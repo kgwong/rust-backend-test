@@ -1,6 +1,6 @@
 use block_id::{Alphabet, BlockId};
 
-//use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct RoomCodeGenerator {
@@ -11,8 +11,13 @@ pub struct RoomCodeGenerator {
 
 impl RoomCodeGenerator {
     pub fn new(length: u8) -> Self {
+        let start = SystemTime::now();
+        let timestamp = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs() as u128;
         RoomCodeGenerator{
-            seed: 0, // TODO: seed current time
+            seed: timestamp,
             count: 0,
             length: length,
         }

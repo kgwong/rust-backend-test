@@ -13,6 +13,7 @@ pub struct Response{
 #[derive(Serialize, Deserialize, Debug, Message)]
 #[rtype(result = "GenericResponse<Response>")]
 pub struct Request {
+    // The player's contribution of the drawing
     pub drawing: Drawing,
     pub round: usize,
 }

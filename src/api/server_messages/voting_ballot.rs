@@ -9,7 +9,10 @@ use crate::game::drawing::Drawing;
 pub struct BallotItem {
     pub id: Uuid,
     pub suggestion: String,
+    // the player's contribution to the drawing
     pub drawing: Drawing,
+    // the imprint that the player drew with
+    pub imprint: Drawing,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
