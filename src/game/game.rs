@@ -8,14 +8,18 @@ use crate::{client_connection::ClientConnection, api::{
     server_messages::{
         lobby_update::{LobbyUpdate},
         drawing_parameters::DrawingParameters,
-        voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}}}};
-use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector};
+        voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}, game_settings_update::GameSettingsUpdate}}};
+use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector, game_settings::{GameSettings, GameMode}, deck_repository};
 
 #[derive(Debug)]
 pub struct JoinGameError;
 
 #[derive(Debug)]
 pub struct StartGameError;
+
+
+#[derive(Debug)]
+pub struct UpdateSettingsError;
 
 const MIN_PLAYERS: usize = 2;
 const MAX_PLAYERS: usize = 8;
@@ -32,6 +36,7 @@ pub enum GameState{
 #[derive(Debug)]
 pub struct Game{
     room_code: String,
+    settings: GameSettings,
     state: GameState,
 
     last_player_number: usize,
@@ -40,10 +45,8 @@ pub struct Game{
 
     curr_round: Option<usize>, // 1-indexed
     rounds: Vec<Round>,
-    num_rounds: usize,
 
     drawing_suggestions_deck: Deck<>,
-
 }
 
 // Public API
@@ -54,8 +57,16 @@ impl Game{
         host_player_client_connection: Rc<ClientConnection>,
         host_player_name: String
     ) -> Self {
-        Game {
+        let new_game = Game {
             room_code: room_code,
+            settings: GameSettings {
+                mode: GameMode::Default,
+                rounds: 5,
+                drawing_phase_time_limit_seconds: None,
+                voting_phase_time_limit_seconds: None,
+                drawing_decks_included: deck_repository::get_available_deck_names().into_iter()
+                                            .map(|d| (d.to_string(), true)).collect(),
+            },
             state: GameState::WaitingForPlayers,
             last_player_number: 0,
             host_id: host_player_client_connection.id.clone(),
@@ -65,10 +76,12 @@ impl Game{
             )]),
             curr_round: None,
             rounds: std::vec![],
-            num_rounds: 5,
             drawing_suggestions_deck:
                 Deck::from(File::open("./drawing_suggestions.json").expect("file")).expect("expect"),
-        }
+        };
+        new_game.broadcast_lobby_update();
+        new_game.broadcast_settings_update();
+        new_game
     }
 
     pub fn add_player(
@@ -83,12 +96,14 @@ impl Game{
             return Err(JoinGameError)
         }
 
+        self.send_settings_update_to_player(&client_connection);
+
         self.last_player_number += 1;
         let player = Player::new(client_connection, self.resolve_name(proposed_name), self.last_player_number);
         self.players.insert(player.client.id, Rc::new(RefCell::new(player)));
 
         info!("CurrentPlayers: {:?}", self.players);
-        self.broadcast_update();
+        self.broadcast_lobby_update();
         return Ok(());
     }
 
@@ -125,7 +140,7 @@ impl Game{
                 }
             },
         }
-        self.broadcast_update();
+        self.broadcast_lobby_update();
     }
 
     pub fn all_players_disconnected(&self) -> bool {
@@ -137,8 +152,12 @@ impl Game{
         true
     }
 
-    pub fn start_game(&mut self, client_id: Uuid) -> Result<(), StartGameError> {
-        if self.is_host(&client_id) {
+    pub fn update_settings(&mut self, client_id: Uuid) -> Result<(), UpdateSettingsError> {
+        Err(UpdateSettingsError)
+    }
+
+    pub fn start_game(&mut self, client_id: &Uuid) -> Result<(), StartGameError> {
+        if self.is_host(client_id) {
             if self.state != GameState::WaitingForPlayers {
                 return Err(StartGameError);
             }
@@ -160,7 +179,7 @@ impl Game{
         if let Some(player) = self.players.get_mut(client_id){
             let state = match ready_state { true => PlayerState::Ready, false => PlayerState::NotReady };
             player.borrow_mut().state = state;
-            self.broadcast_update();
+            self.broadcast_lobby_update();
             Ok(())
         } else {
             Err(()) // TODO
@@ -268,7 +287,7 @@ impl Game{
 
         self.state = GameState::DrawingPhase;
         self.set_all_player_states(PlayerState::Drawing);
-        self.broadcast_update();
+        self.broadcast_lobby_update();
         self.send_drawing_parameters();
     }
 
@@ -278,7 +297,7 @@ impl Game{
             self.send_voting_ballots();
             self.state = GameState::VotingPhase;
             self.set_all_player_states(PlayerState::Voting);
-            self.broadcast_update()
+            self.broadcast_lobby_update()
         }
     }
 
@@ -289,10 +308,10 @@ impl Game{
             self.add_to_score(&scores);
 
             // this is the last round, go to results
-            if self.curr_round == Some(self.num_rounds) {
+            if self.curr_round == Some(self.settings.rounds) {
                 self.state = GameState::Results;
                 self.set_all_player_states(PlayerState::NotReady);
-                self.broadcast_update();
+                self.broadcast_lobby_update();
             } else {
                 self.start_next_round();
             }
@@ -311,18 +330,26 @@ impl Game{
     fn set_player_state(&mut self, client_id: &Uuid, state: PlayerState) {
         debug!("Setting PlayerState {} {:?}", client_id, state);
         self.players.get_mut(client_id).expect("player should exist").borrow_mut().state = state;
-        self.broadcast_update()
+        self.broadcast_lobby_update()
     }
 
 }
 
 // Messaging
 impl Game{
-    pub fn broadcast_update(&self) {
-        info!("Broadcasting update to all players");
+    pub fn broadcast_lobby_update(&self) {
+        info!("Broadcasting lobby update to all players");
         for player in self.players.values() {
-            self.send_game_view_to_player(&player.borrow().client);
+            self.send_lobby_update_to_player(&player.borrow().client);
         }
+    }
+
+    pub fn broadcast_settings_update(&self) {
+        info!("Broadcasting lobby update to all players");
+        for player in self.players.values() {
+            self.send_settings_update_to_player(&player.borrow().client);
+        }
+
     }
 
     pub fn send_drawing_parameters(&self) {
@@ -341,18 +368,26 @@ impl Game{
 
     }
 
-    fn send_game_view_to_player(&self, client_connection: &ClientConnection) {
+    fn send_lobby_update_to_player(&self, client_connection: &ClientConnection) {
         client_connection.actor_addr.do_send(
             LobbyUpdate {
                 message_name: "lobby_update".to_string(),
                 room_code: self.room_code.clone(),
                 state: self.state.clone(),
                 round: self.curr_round,
-                num_rounds: self.num_rounds,
                 players: self.players.iter().map(
                     |(id, player)|
                         player.borrow().to_view(self.is_host(id), *id == client_connection.id)
                 ).collect(),
+            }
+        );
+    }
+
+    fn send_settings_update_to_player(&self, client_connection: &ClientConnection) {
+        client_connection.actor_addr.do_send(
+            GameSettingsUpdate {
+                message_name: "game_settings_update".to_string(),
+                settings: self.settings.clone(),
             }
         );
     }

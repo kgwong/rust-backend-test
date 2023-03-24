@@ -8,6 +8,7 @@ use log::{info};
 use serde_json::{Value};
 
 use crate::api::server_messages::*;
+use crate::game::game_settings;
 use crate::server::{self, ClientRequestWrapper};
 use crate::websocket::server::ClientDisconnectMessage;
 
@@ -195,6 +196,18 @@ impl Handler<voting_ballot::VotingBallot> for ClientSession {
     fn handle(
         &mut self,
         msg: voting_ballot::VotingBallot,
+        ctx: &mut Self::Context)
+    -> Self::Result {
+        ctx.text(serde_json::to_string(&msg).expect("oops"));
+    }
+}
+
+impl Handler<game_settings_update::GameSettingsUpdate> for ClientSession {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: game_settings_update::GameSettingsUpdate,
         ctx: &mut Self::Context)
     -> Self::Result {
         ctx.text(serde_json::to_string(&msg).expect("oops"));

@@ -53,7 +53,6 @@ impl GameManager {
         let room_code = self.room_code_generator.generate();
 
         let game = Game::new(room_code.clone(), client_connection.clone(), name);
-        game.broadcast_update();
         self.games_by_room_code.insert(room_code.clone(), game);
         self.room_code_by_client_id.insert(client_connection.id, room_code.clone());
         info!("# of games: {}", self.games_by_room_code.len());
@@ -85,7 +84,7 @@ impl GameManager {
 
     pub fn start_game(&mut self, client_id: &Uuid) -> Result<(), StartGameError> {
         let game = self.get_game_mut(client_id).ok_or_else(|| StartGameError)?;
-        game.start_game(*client_id).map_err(|_| StartGameError)
+        game.start_game(client_id).map_err(|_| StartGameError)
     }
 
     pub fn submit_drawing(&mut self, client_id: &Uuid, drawing: Drawing, round: usize)
