@@ -183,6 +183,25 @@ impl Handler<ClientRequestWrapper<update_game_settings::Request>> for GameServer
     }
 }
 
+impl Handler<ClientRequestWrapper<play_again::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<play_again::Request>>;
+
+    fn handle(
+        &mut self,
+        msg: ClientRequestWrapper<play_again::Request>,
+        _ctx: &mut Context<Self>)
+    -> Self::Result {
+        match self.gm.play_again(&msg.client_connection.id) {
+            Ok(_) =>
+                MessageResult(
+                    response::GenericResponse::Ok(play_again::Response{})),
+            Err(_) =>
+                MessageResult(
+                    response::GenericResponse::ClientError("failed".to_string())),
+        }
+    }
+}
+
 impl Handler<ClientDisconnectMessage> for GameServer {
     type Result = MessageResult<ClientDisconnectMessage>;
 

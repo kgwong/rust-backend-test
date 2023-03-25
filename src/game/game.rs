@@ -17,6 +17,9 @@ pub struct JoinGameError;
 #[derive(Debug)]
 pub struct StartGameError;
 
+#[derive(Debug)]
+pub struct PlayAgainError;
+
 
 #[derive(Debug)]
 pub struct UpdateSettingsError;
@@ -205,30 +208,44 @@ impl Game{
     }
 
     pub fn start_game(&mut self, client_id: &Uuid) -> Result<(), StartGameError> {
-        if self.is_host(client_id) {
-            if self.state != GameState::WaitingForPlayers {
-                return Err(StartGameError);
-            }
-            if self.players.len() < MIN_PLAYERS {
-                return Err(StartGameError);
-            }
-            info!("Host is starting the game");
-            // TODO remove disconnected players on restart
-
-            let decks: Vec<Deck> = self.settings.drawing_decks_included.iter()
-                .filter(|(_, i)| **i)
-                .map(|(n, _)| {
-                    Deck::from(File::open(format!("./decks/{}.json", n)).expect("file")).expect("expect")
-                })
-                .collect();
-            let mut combined_deck = Deck::from_decks(decks);
-            combined_deck.shuffle();
-            self.drawing_suggestions_deck = Some(combined_deck);
-            self.start_next_round();
-            Ok(())
-        } else {
-            Err(StartGameError)
+        if !self.is_host(client_id) {
+            return Err(StartGameError)
         }
+        if self.state != GameState::WaitingForPlayers {
+            return Err(StartGameError);
+        }
+        if self.players.len() < MIN_PLAYERS {
+            return Err(StartGameError);
+        }
+        info!("Host is starting the game");
+
+        let decks: Vec<Deck> = self.settings.drawing_decks_included.iter()
+            .filter(|(_, i)| **i)
+            .map(|(n, _)| {
+                Deck::from(File::open(format!("./decks/{}.json", n)).expect("file")).expect("expect")
+            })
+            .collect();
+        let mut combined_deck = Deck::from_decks(decks);
+        combined_deck.shuffle();
+        self.drawing_suggestions_deck = Some(combined_deck);
+        self.start_next_round();
+        Ok(())
+    }
+
+    pub fn play_again(&mut self, client_id: &Uuid) -> Result<(), PlayAgainError> {
+        if !self.is_host(client_id) {
+            return Err(PlayAgainError)
+        }
+        if self.state != GameState::Results {
+            return Err(PlayAgainError);
+        }
+        self.players.retain(|_, p| !p.borrow().is_disconnected);
+
+        self.state = GameState::WaitingForPlayers;
+        self.curr_round = None;
+        self.rounds = std::vec![];
+        self.broadcast_lobby_update();
+        Ok(())
     }
 
     pub fn set_player_ready(&mut self, client_id: &Uuid, ready_state: bool) -> Result<(), ()> {

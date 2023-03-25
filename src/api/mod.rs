@@ -5,6 +5,7 @@ pub mod set_player_ready;
 pub mod submit_drawing;
 pub mod submit_vote;
 pub mod update_game_settings;
+pub mod play_again;
 
 pub mod response;
 

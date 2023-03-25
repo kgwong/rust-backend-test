@@ -26,6 +26,9 @@ pub struct SubmitVoteError;
 #[derive(Debug)]
 pub struct UpdateGameSettingsError;
 
+#[derive(Debug)]
+pub struct PlayAgainError;
+
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
     games_by_room_code: std::collections::HashMap<String, Game>,
@@ -90,12 +93,16 @@ impl GameManager {
     -> Result<(), ReadyPlayerError> {
         let game = self.get_game_mut(client_id).ok_or_else(|| ReadyPlayerError)?;
         game.set_player_ready(client_id, ready_state).map_err(|_| ReadyPlayerError)
-
     }
 
     pub fn start_game(&mut self, client_id: &Uuid) -> Result<(), StartGameError> {
         let game = self.get_game_mut(client_id).ok_or_else(|| StartGameError)?;
         game.start_game(client_id).map_err(|_| StartGameError)
+    }
+
+    pub fn play_again(&mut self, client_id: &Uuid) -> Result<(), PlayAgainError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| PlayAgainError)?;
+        game.play_again(client_id).map_err(|_| PlayAgainError)
     }
 
     pub fn submit_drawing(&mut self, client_id: &Uuid, drawing: Drawing, round: usize)
