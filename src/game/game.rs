@@ -192,7 +192,6 @@ impl Game{
                 return Err(UpdateSettingsError)
             }
         }
-
         // Apply settings after passing input validation
         self.settings.mode = game_settings.mode;
         self.settings.rounds = game_settings.rounds;

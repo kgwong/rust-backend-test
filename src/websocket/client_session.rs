@@ -3,7 +3,7 @@ use std::{net};
 use actix::*;
 use actix_web_actors::ws;
 
-use log::{info};
+use log::{info, error};
 
 use serde_json::{Value};
 
@@ -146,18 +146,30 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                                     });
                                 l.wait(ctx);
                             }
-                            _ => info!("Unknown message {}", message_name)
+                            "update_game_settings" => {
+                                let req: crate::api::update_game_settings::Request = serde_json::from_str(&text).expect("failed to parse");
+                                let l = self.server
+                                    .send(self.wrap_request(req, ctx))
+                                    .into_actor(self)
+                                    .then(|res, _, ctx|{
+                                        let js_resp = serde_json::to_string(&res.unwrap()).expect("oops");
+                                        ctx.text(js_resp);
+                                        fut::ready(())
+                                    });
+                                l.wait(ctx);
+                            }
+                            _ => info!("unknown message {}", message_name)
                         }
                     },
                     _ => info!("failure")
                 }
             }
             Err(e) => {
-                eprintln!("Failed to handle message: {}", e);
+                error!("Failed to handle message: {}", e);
                 ctx.text("Internal Server Error");
             },
             _ => {
-                //TODO\
+                //TODO
             }
         }
     }
