@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-
 use actix::prelude::*;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+
+use crate::game::game_settings::GameSettings;
 
 use super::response::*;
 
@@ -14,11 +13,11 @@ pub struct Response{
 #[derive(Serialize, Deserialize, Debug, Message)]
 #[rtype(result = "GenericResponse<Response>")]
 pub struct Request {
-    pub votes: HashMap<Uuid, i32>,
+    pub game_settings: GameSettings,
 }
 
 impl TMessageName for Response{
     fn message_name() -> &'static str {
-        "submit_vote"
+        "update_game_settings"
     }
 }

@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use crate::game::{drawing::Drawing,game::{Game, JoinGameError}, room_code_generator::RoomCodeGenerator};
 
+use super::{game_settings::GameSettings};
+
 #[derive(Debug)]
 pub struct CreateGameError;
 
@@ -20,6 +22,9 @@ pub struct SubmitDrawingError;
 
 #[derive(Debug)]
 pub struct SubmitVoteError;
+
+#[derive(Debug)]
+pub struct UpdateGameSettingsError;
 
 pub struct GameManager {
     room_code_generator: RoomCodeGenerator,
@@ -73,6 +78,12 @@ impl GameManager {
         let game = self.games_by_room_code.get_mut(room_code).ok_or_else(|| JoinGameError)?;
         self.room_code_by_client_id.insert(client_connection.id, room_code.to_string());
         game.add_player(client_connection, proposed_name)
+    }
+
+    pub fn update_game_settings(&mut self, client_id: &Uuid, game_settings: &GameSettings)
+    -> Result<(), UpdateGameSettingsError> {
+        let game = self.get_game_mut(client_id).ok_or_else(|| UpdateGameSettingsError)?;
+        game.update_settings(client_id, &game_settings).map_err(|_| UpdateGameSettingsError)
     }
 
     pub fn set_player_ready(&mut self, client_id: &Uuid, ready_state: bool)

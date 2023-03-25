@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use crate::game::drawing::Drawing;
 
 use super::response::*;
-use super::response::TMessageName;
 
 
 #[derive(Serialize, Deserialize, Debug)]

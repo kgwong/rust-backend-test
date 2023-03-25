@@ -8,7 +8,6 @@ use log::{info};
 use serde_json::{Value};
 
 use crate::api::server_messages::*;
-use crate::game::game_settings;
 use crate::server::{self, ClientRequestWrapper};
 use crate::websocket::server::ClientDisconnectMessage;
 

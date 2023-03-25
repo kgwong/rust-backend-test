@@ -2,9 +2,9 @@
 static DECKS: &'static[&'static str] = &[
     "animals",
     "clothing",
-    "geo_political",
+    "geo-political",
     "hobbies",
-    "musical_instruments",
+    "musical-instruments",
     "occupations",
     "space",
     "transportation",

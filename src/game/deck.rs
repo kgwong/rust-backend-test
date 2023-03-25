@@ -19,6 +19,12 @@ impl<> Deck<> {
         })
     }
 
+    pub fn from_decks(decks: Vec<Deck>) -> Deck {
+        Deck {
+            v: decks.into_iter().map(|d| d.v).flatten().collect(),
+        }
+    }
+
     pub fn draw_card(&mut self) -> Option<String> {
         self.v.pop()
     }

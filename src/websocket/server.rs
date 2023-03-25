@@ -164,6 +164,24 @@ impl Handler<ClientRequestWrapper<submit_vote::Request>> for GameServer {
     }
 }
 
+impl Handler<ClientRequestWrapper<update_game_settings::Request>> for GameServer {
+    type Result = MessageResult<ClientRequestWrapper<update_game_settings::Request>>;
+
+    fn handle(
+        &mut self,
+        msg: ClientRequestWrapper<update_game_settings::Request>,
+        _ctx: &mut Context<Self>)
+    -> Self::Result {
+        match self.gm.update_game_settings(&msg.client_connection.id, &msg.req.game_settings) {
+            Ok(_) =>
+                MessageResult(
+                    response::GenericResponse::Ok(update_game_settings::Response{})),
+            Err(_) =>
+                MessageResult(
+                    response::GenericResponse::ClientError("failed".to_string())),
+        }
+    }
+}
 
 impl Handler<ClientDisconnectMessage> for GameServer {
     type Result = MessageResult<ClientDisconnectMessage>;

@@ -9,7 +9,7 @@ use crate::{client_connection::ClientConnection, api::{
         lobby_update::{LobbyUpdate},
         drawing_parameters::DrawingParameters,
         voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}, game_settings_update::GameSettingsUpdate}}};
-use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector, game_settings::{GameSettings, GameMode}, deck_repository};
+use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector, game_settings::{GameSettings, GameMode}, deck_repository::{self, get_available_deck_names}};
 
 #[derive(Debug)]
 pub struct JoinGameError;
@@ -46,7 +46,7 @@ pub struct Game{
     curr_round: Option<usize>, // 1-indexed
     rounds: Vec<Round>,
 
-    drawing_suggestions_deck: Deck<>,
+    drawing_suggestions_deck: Option<Deck<>>,
 }
 
 // Public API
@@ -76,8 +76,7 @@ impl Game{
             )]),
             curr_round: None,
             rounds: std::vec![],
-            drawing_suggestions_deck:
-                Deck::from(File::open("./drawing_suggestions.json").expect("file")).expect("expect"),
+            drawing_suggestions_deck: None,
         };
         new_game.broadcast_lobby_update();
         new_game.broadcast_settings_update();
@@ -152,8 +151,58 @@ impl Game{
         true
     }
 
-    pub fn update_settings(&mut self, client_id: Uuid) -> Result<(), UpdateSettingsError> {
-        Err(UpdateSettingsError)
+    pub fn update_settings(&mut self, client_id: &Uuid, game_settings: &GameSettings) -> Result<(), UpdateSettingsError> {
+        if self.state != GameState::WaitingForPlayers {
+            return Err(UpdateSettingsError);
+        }
+        if !self.is_host(&client_id) {
+            return Err(UpdateSettingsError);
+        }
+
+        if game_settings.rounds > 25 {
+            return Err(UpdateSettingsError);
+        }
+        // TODO: need to allow setting time limit when it's implemented
+        if let Some(drawing_limit) = game_settings.drawing_phase_time_limit_seconds {
+            if drawing_limit > 300 {
+                return Err(UpdateSettingsError);
+            }
+            return Err(UpdateSettingsError);
+        }
+        if let Some(voting_limit) = game_settings.voting_phase_time_limit_seconds {
+            if voting_limit > 300 {
+                return Err(UpdateSettingsError);
+            }
+            return Err(UpdateSettingsError);
+        }
+
+        //verify that this game update doesn't remove all the decks
+        let removes_all_decks = self.settings.drawing_decks_included.iter()
+            .filter(|(_, i)| **i)
+            .all(|(n, _)| {
+                game_settings.drawing_decks_included.get(n) == Some(&false)
+            });
+        if removes_all_decks {
+            return Err(UpdateSettingsError)
+        }
+
+        for deck in game_settings.drawing_decks_included.keys() {
+            if !get_available_deck_names().contains(&deck.as_str()) {
+                // deck name provided does not exist
+                return Err(UpdateSettingsError)
+            }
+        }
+
+        // Apply settings after passing input validation
+        self.settings.mode = game_settings.mode;
+        self.settings.rounds = game_settings.rounds;
+        self.settings.drawing_phase_time_limit_seconds = game_settings.drawing_phase_time_limit_seconds;
+        self.settings.voting_phase_time_limit_seconds = game_settings.voting_phase_time_limit_seconds;
+        for (deck_name, include) in game_settings.drawing_decks_included.iter() {
+            self.settings.drawing_decks_included.insert(deck_name.to_string(), *include);
+        }
+        self.broadcast_settings_update();
+        Ok(())
     }
 
     pub fn start_game(&mut self, client_id: &Uuid) -> Result<(), StartGameError> {
@@ -165,9 +214,17 @@ impl Game{
                 return Err(StartGameError);
             }
             info!("Host is starting the game");
-            // TODO reset the deck on restart game
             // TODO remove disconnected players on restart
-            self.drawing_suggestions_deck.shuffle();
+
+            let decks: Vec<Deck> = self.settings.drawing_decks_included.iter()
+                .filter(|(_, i)| **i)
+                .map(|(n, _)| {
+                    Deck::from(File::open(format!("./decks/{}.json", n)).expect("file")).expect("expect")
+                })
+                .collect();
+            let mut combined_deck = Deck::from_decks(decks);
+            combined_deck.shuffle();
+            self.drawing_suggestions_deck = Some(combined_deck);
             self.start_next_round();
             Ok(())
         } else {
@@ -281,7 +338,7 @@ impl Game{
         self.rounds.push(
             Round::new(
                 self.players.clone(),
-                &mut self.drawing_suggestions_deck,
+                &mut self.drawing_suggestions_deck.as_mut().expect("Deck should be init after start_game"),
                 &imprint_map,
             ));
 
