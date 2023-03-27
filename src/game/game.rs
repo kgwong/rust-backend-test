@@ -8,7 +8,7 @@ use crate::{client_connection::ClientConnection, api::{
     server_messages::{
         lobby_update::{LobbyUpdate},
         drawing_parameters::DrawingParameters,
-        voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}, game_settings_update::GameSettingsUpdate}}};
+        voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}, game_settings_update::GameSettingsUpdate, results::Results}}};
 use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector, game_settings::{GameSettings, GameMode}, deck_repository::{self, get_available_deck_names}};
 
 #[derive(Debug)]
@@ -244,6 +244,9 @@ impl Game{
         self.state = GameState::WaitingForPlayers;
         self.curr_round = None;
         self.rounds = std::vec![];
+        for p in self.players.values_mut() {
+            p.borrow_mut().score = 0;
+        }
         self.broadcast_lobby_update();
         Ok(())
     }
@@ -299,14 +302,14 @@ impl Game{
     }
 
     fn update_host(&mut self) {
-        self.host_id = self.get_eldest_connected_player_id().clone();
+        self.host_id = self.get_player_with_highest_host_rank().clone();
     }
 
-    fn get_eldest_connected_player_id(&self) -> Uuid {
+    fn get_player_with_highest_host_rank(&self) -> Uuid {
         let eldest_player = self.players.values()
             .filter(|player| !player.borrow().is_disconnected)
             .min_by(
-                |p1, p2| p1.borrow().number.cmp(&p2.borrow().number))
+                |p1, p2| p1.borrow().host_rank.cmp(&p2.borrow().host_rank))
             .expect("should always have players");
         eldest_player.borrow().client.id
     }
@@ -384,7 +387,23 @@ impl Game{
             if self.curr_round == Some(self.settings.rounds) {
                 self.state = GameState::Results;
                 self.set_all_player_states(PlayerState::NotReady);
+
+
+                let best_drawing = self.rounds.iter()
+                    .map(|r| r.get_data())
+                    .flatten()
+                    .max_by(|(_, data), (_, data2)| data.votes.cmp(&data2.votes));
+                let s = best_drawing.expect("should have drawings").1;
+                let r = Results {
+                    message_name: "results".to_string(),
+                    highest_rated_drawing: s.drawing.as_ref().expect("drawing should exist").to_owned().to_vec(),
+                    imprint: s.imprint.as_ref().map(|i| i.as_ref().clone()),
+                    num_votes: s.votes,
+                    drawing_suggestion: s.drawing_suggestion.clone(),
+                };
+                // Important: send scores before sending the results
                 self.broadcast_lobby_update();
+                self.broadcast_results(r);
             } else {
                 self.start_next_round();
             }
@@ -418,11 +437,17 @@ impl Game{
     }
 
     pub fn broadcast_settings_update(&self) {
-        info!("Broadcasting lobby update to all players");
+        info!("Broadcasting settings update to all players");
         for player in self.players.values() {
             self.send_settings_update_to_player(&player.borrow().client);
         }
+    }
 
+    pub fn broadcast_results(&self, results: Results) {
+        info!("Broadcasting results to all players");
+        for player in self.players.values() {
+            self.send_results_to_player(&player.borrow().client, results.clone());
+        }
     }
 
     pub fn send_drawing_parameters(&self) {
@@ -463,6 +488,10 @@ impl Game{
                 settings: self.settings.clone(),
             }
         );
+    }
+
+    fn send_results_to_player(&self, client_connection: &ClientConnection, results: Results) {
+        client_connection.actor_addr.do_send(results);
     }
 
     fn send_voting_ballots(&self) {

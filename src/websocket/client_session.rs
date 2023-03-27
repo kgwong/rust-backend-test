@@ -236,3 +236,15 @@ impl Handler<game_settings_update::GameSettingsUpdate> for ClientSession {
         ctx.text(serde_json::to_string(&msg).expect("oops"));
     }
 }
+
+impl Handler<results::Results> for ClientSession {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: results::Results,
+        ctx: &mut Self::Context)
+    -> Self::Result {
+        ctx.text(serde_json::to_string(&msg).expect("oops"));
+    }
+}

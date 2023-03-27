@@ -32,8 +32,9 @@ pub struct PlayerView {
 pub struct Player{
     pub client: Rc<ClientConnection>,
     pub name: String,
-    // number: 1 if first player, 2 if second, and so on
-    pub number: usize,
+    // The connected player with the lowest host_rank should be the host.
+    // host_rank = 1 if first player, 2 if second, and so on
+    pub host_rank: usize,
     pub state: PlayerState,
     pub score: i32,
     pub is_disconnected: bool,
@@ -44,7 +45,7 @@ impl Player{
         Player {
             client: client,
             name: name,
-            number: number,
+            host_rank: number,
             state: PlayerState::NotReady,
             score: 0,
             is_disconnected: false,
