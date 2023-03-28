@@ -65,6 +65,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
         info!("Message Received from {}: {:?}", self.id, msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Close(close_reason)) => {
+                info!("Connection closing: {:?}", close_reason);
+                ctx.close(close_reason)
+            }
             Ok(ws::Message::Text(text)) => {
                 let json: Value = match serde_json::from_str(&text) {
                     Ok(x) => x,
