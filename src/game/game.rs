@@ -35,14 +35,14 @@ pub struct Game{
     settings: GameSettings,
     state: GameState,
 
-    last_player_number: usize,
+    last_player_host_rank: usize,
     host_id: Uuid,
     players: HashMap<Uuid, Rc<RefCell<Player>>>,
 
     curr_round: Option<usize>, // 1-indexed
     rounds: Vec<Round>,
 
-    drawing_suggestions_deck: Option<Deck<>>,
+    drawing_suggestions_deck: Option<Deck<String>>,
 }
 
 // Public API
@@ -64,7 +64,7 @@ impl Game{
                                             .map(|d| (d.to_string(), true)).collect(),
             },
             state: GameState::WaitingForPlayers,
-            last_player_number: 0,
+            last_player_host_rank: 0,
             host_id: host_player_client_connection.id.clone(),
             players: HashMap::from([(
                 host_player_client_connection.id,
@@ -93,8 +93,8 @@ impl Game{
 
         self.send_settings_update_to_player(&client_connection);
 
-        self.last_player_number += 1;
-        let player = Player::new(client_connection, self.resolve_name(proposed_name), self.last_player_number);
+        self.last_player_host_rank += 1;
+        let player = Player::new(client_connection, self.resolve_name(proposed_name), self.last_player_host_rank);
         self.players.insert(player.client.id, Rc::new(RefCell::new(player)));
 
         info!("CurrentPlayers: {:?}", self.players);
@@ -212,7 +212,7 @@ impl Game{
         }
         info!("Host is starting the game");
 
-        let decks: Vec<Deck> = self.settings.drawing_decks_included.iter()
+        let decks: Vec<_> = self.settings.drawing_decks_included.iter()
             .filter(|(_, i)| **i)
             .map(|(n, _)| {
                 Deck::from(File::open(format!("./decks/{}.json", n)).expect("file")).expect("expect")
@@ -220,6 +220,7 @@ impl Game{
             .collect();
         let mut combined_deck = Deck::from_decks(decks);
         combined_deck.shuffle();
+        combined_deck.add_card("rabbit".to_string());
         self.drawing_suggestions_deck = Some(combined_deck);
         self.start_next_round();
         Ok(())

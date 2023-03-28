@@ -68,11 +68,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
             Ok(ws::Message::Text(text)) => {
                 let json: Value = match serde_json::from_str(&text) {
                     Ok(x) => x,
-                    Err(error) => panic!("ERROR: {}", error)
+                    Err(_) => {
+                        error!("Invalid JSON: {}", &text);
+                        ctx.stop();
+                        return;
+                    }
                 };
                 match &json["message_name"] {
                     Value::String(message_name) => {
-                        // let mut shared_state = self.shared_state.lock().unwrap();
                         match message_name.as_str() {
                             "create_game"  =>  {
                                 let req: crate::api::create_game::Request = serde_json::from_str(&text).expect("failed to parse");
@@ -177,11 +180,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession {
                 }
             }
             Err(e) => {
-                error!("Failed to handle message: {}", e);
-                ctx.text("Internal Server Error");
+                error!("Protocol Error: {}", e);
+                ctx.stop()
             },
             _ => {
-                //TODO
+                error!("Unhandled msg");
+                ctx.stop()
             }
         }
     }
@@ -197,7 +201,7 @@ impl Handler<lobby_update::LobbyUpdate> for ClientSession {
         msg: lobby_update::LobbyUpdate,
         ctx: &mut Self::Context)
     -> Self::Result {
-        ctx.text(serde_json::to_string(&msg).expect("oops"));
+        ctx.text(serde_json::to_string(&msg).expect("should be JSON serializable"));
     }
 }
 
@@ -209,7 +213,7 @@ impl Handler<drawing_parameters::DrawingParameters> for ClientSession {
         msg: drawing_parameters::DrawingParameters,
         ctx: &mut Self::Context)
     -> Self::Result {
-        ctx.text(serde_json::to_string(&msg).expect("oops"));
+        ctx.text(serde_json::to_string(&msg).expect("should be JSON serializable"));
     }
 }
 
@@ -221,7 +225,7 @@ impl Handler<voting_ballot::VotingBallot> for ClientSession {
         msg: voting_ballot::VotingBallot,
         ctx: &mut Self::Context)
     -> Self::Result {
-        ctx.text(serde_json::to_string(&msg).expect("oops"));
+        ctx.text(serde_json::to_string(&msg).expect("should be JSON serializable"));
     }
 }
 
@@ -233,7 +237,7 @@ impl Handler<game_settings_update::GameSettingsUpdate> for ClientSession {
         msg: game_settings_update::GameSettingsUpdate,
         ctx: &mut Self::Context)
     -> Self::Result {
-        ctx.text(serde_json::to_string(&msg).expect("oops"));
+        ctx.text(serde_json::to_string(&msg).expect("should be JSON serializable"));
     }
 }
 
@@ -245,6 +249,6 @@ impl Handler<results::Results> for ClientSession {
         msg: results::Results,
         ctx: &mut Self::Context)
     -> Self::Result {
-        ctx.text(serde_json::to_string(&msg).expect("oops"));
+        ctx.text(serde_json::to_string(&msg).expect("should be JSON serializable"));
     }
 }

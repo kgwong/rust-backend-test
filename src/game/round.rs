@@ -27,7 +27,7 @@ pub struct Round {
 impl Round {
     pub fn new(
         players: HashMap<Uuid, Rc<RefCell<Player>>>,
-        suggestion_deck: &mut Deck,
+        suggestion_deck: &mut Deck<String>,
         imprint_map: &HashMap<Uuid, Option<Rc<Drawing>>>,
 
     ) -> Round {

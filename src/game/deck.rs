@@ -2,15 +2,13 @@ use std::{fs, io::Read};
 
 use rand::seq::SliceRandom;
 
-//TODO add type param
 #[derive(Debug)]
-pub struct Deck<> {
-    v: Vec<String>
+pub struct Deck<CardT> {
+    v: Vec<CardT>
 }
 
-impl<> Deck<> {
-
-    pub fn from(mut file: fs::File) -> Result<Deck<>, std::io::Error> {
+impl Deck<String> {
+    pub fn from(mut file: fs::File) -> Result<Self, std::io::Error> {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
         let v = serde_json::from_str(&contents)?;
@@ -18,14 +16,20 @@ impl<> Deck<> {
             v: v,
         })
     }
+}
 
-    pub fn from_decks(decks: Vec<Deck>) -> Deck {
+impl<CardT> Deck<CardT> {
+    pub fn from_decks(decks: Vec<Self>) -> Self {
         Deck {
             v: decks.into_iter().map(|d| d.v).flatten().collect(),
         }
     }
 
-    pub fn draw_card(&mut self) -> Option<String> {
+    pub fn add_card(&mut self, card: CardT) {
+        self.v.push(card);
+    }
+
+    pub fn draw_card(&mut self) -> Option<CardT> {
         self.v.pop()
     }
 
