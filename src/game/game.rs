@@ -9,20 +9,13 @@ use crate::{client_connection::ClientConnection, api::{
         lobby_update::{LobbyUpdate},
         drawing_parameters::DrawingParameters,
         voting_ballot::{BallotItem, VotingBallot, VotableBallotItem}, game_settings_update::GameSettingsUpdate, results::Results}}};
-use super::{player_view::{Player, PlayerState}, drawing::{Drawing}, round::Round, deck::Deck, imprint_selector, game_settings::{GameSettings, GameMode}, deck_repository::{self, get_available_deck_names}};
+use super::{
+    player_view::{Player, PlayerState}, drawing::{Drawing},
+    round::Round, deck::Deck, imprint_selector,
+    game_settings::{GameSettings, GameMode},
+    deck_repository::{self, get_available_deck_names},
+    errors::*};
 
-#[derive(Debug)]
-pub struct JoinGameError;
-
-#[derive(Debug)]
-pub struct StartGameError;
-
-#[derive(Debug)]
-pub struct PlayAgainError;
-
-
-#[derive(Debug)]
-pub struct UpdateSettingsError;
 
 const MIN_PLAYERS: usize = 2;
 const MAX_PLAYERS: usize = 8;
@@ -92,10 +85,10 @@ impl Game{
         proposed_name: &str
     ) -> Result<(), JoinGameError> {
         if self.players.len() == MAX_PLAYERS {
-            return Err(JoinGameError);
+            return Err(JoinGameError::GameFull);
         }
         if self.state != GameState::WaitingForPlayers {
-            return Err(JoinGameError)
+            return Err(JoinGameError::GameAlreadyStarted)
         }
 
         self.send_settings_update_to_player(&client_connection);
@@ -154,29 +147,30 @@ impl Game{
         true
     }
 
-    pub fn update_settings(&mut self, client_id: &Uuid, game_settings: &GameSettings) -> Result<(), UpdateSettingsError> {
+    pub fn update_settings(&mut self, client_id: &Uuid, game_settings: &GameSettings)
+    -> Result<(), UpdateGameSettingsError> {
         if self.state != GameState::WaitingForPlayers {
-            return Err(UpdateSettingsError);
+            return Err(UpdateGameSettingsError::GameAlreadyStarted);
         }
         if !self.is_host(&client_id) {
-            return Err(UpdateSettingsError);
+            return Err(UpdateGameSettingsError::ClientIsNotTheHost);
         }
 
         if game_settings.rounds > 25 {
-            return Err(UpdateSettingsError);
+            return Err(UpdateGameSettingsError::InvalidNumRounds);
         }
         // TODO: need to allow setting time limit when it's implemented
         if let Some(drawing_limit) = game_settings.drawing_phase_time_limit_seconds {
             if drawing_limit > 300 {
-                return Err(UpdateSettingsError);
+                return Err(UpdateGameSettingsError::InvalidDrawingTimeLimit);
             }
-            return Err(UpdateSettingsError);
+            return Err(UpdateGameSettingsError::InvalidDrawingTimeLimit);
         }
         if let Some(voting_limit) = game_settings.voting_phase_time_limit_seconds {
             if voting_limit > 300 {
-                return Err(UpdateSettingsError);
+                return Err(UpdateGameSettingsError::InvalidVotingTimeLimit);
             }
-            return Err(UpdateSettingsError);
+            return Err(UpdateGameSettingsError::InvalidVotingTimeLimit);
         }
 
         //verify that this game update doesn't remove all the decks
@@ -186,13 +180,12 @@ impl Game{
                 game_settings.drawing_decks_included.get(n) == Some(&false)
             });
         if removes_all_decks {
-            return Err(UpdateSettingsError)
+            return Err(UpdateGameSettingsError::SettingRemovesAllDecks)
         }
 
         for deck in game_settings.drawing_decks_included.keys() {
             if !get_available_deck_names().contains(&deck.as_str()) {
-                // deck name provided does not exist
-                return Err(UpdateSettingsError)
+                return Err(UpdateGameSettingsError::DeckDoesNotExist)
             }
         }
         // Apply settings after passing input validation
@@ -209,13 +202,13 @@ impl Game{
 
     pub fn start_game(&mut self, client_id: &Uuid) -> Result<(), StartGameError> {
         if !self.is_host(client_id) {
-            return Err(StartGameError)
+            return Err(StartGameError::ClientIsNotTheHost)
         }
         if self.state != GameState::WaitingForPlayers {
-            return Err(StartGameError);
+            return Err(StartGameError::GameAlreadyStarted);
         }
         if self.players.len() < MIN_PLAYERS {
-            return Err(StartGameError);
+            return Err(StartGameError::MinimumPlayersNotReached);
         }
         info!("Host is starting the game");
 
@@ -234,10 +227,10 @@ impl Game{
 
     pub fn play_again(&mut self, client_id: &Uuid) -> Result<(), PlayAgainError> {
         if !self.is_host(client_id) {
-            return Err(PlayAgainError)
+            return Err(PlayAgainError::ClientIsNotTheHost)
         }
         if self.state != GameState::Results {
-            return Err(PlayAgainError);
+            return Err(PlayAgainError::GameIsNotOver);
         }
         self.players.retain(|_, p| !p.borrow().is_disconnected);
 
@@ -251,28 +244,25 @@ impl Game{
         Ok(())
     }
 
-    pub fn set_player_ready(&mut self, client_id: &Uuid, ready_state: bool) -> Result<(), ()> {
-        if let Some(player) = self.players.get_mut(client_id){
-            let state = match ready_state { true => PlayerState::Ready, false => PlayerState::NotReady };
-            player.borrow_mut().state = state;
-            self.broadcast_lobby_update();
-            Ok(())
-        } else {
-            Err(()) // TODO
-        }
+    pub fn set_player_ready(&mut self, client_id: &Uuid, ready_state: bool) {
+        let player = self.players.get_mut(client_id).expect("player should exist");
+        let state = match ready_state { true => PlayerState::Ready, false => PlayerState::NotReady };
+        player.borrow_mut().state = state;
+        self.broadcast_lobby_update();
     }
 
-    pub fn submit_drawing(&mut self, client_id: &Uuid, drawing: Drawing, round: usize) -> Result<(), ()> {
+    pub fn submit_drawing(&mut self, client_id: &Uuid, drawing: Drawing, round: usize)
+    -> Result<(), SubmitDrawingError> {
         if self.curr_round != Some(round) {
             error!("Not Current Round: curr_round: {}, round {}", self.curr_round.unwrap(), round);
-            return Err(());
+            return Err(SubmitDrawingError::DrawingSubmittedForWrongRound);
         }
 
         {
-            let round = self.get_current_round_mut().ok_or(())?;
+            let round = self.get_current_round_mut().ok_or(SubmitDrawingError::DrawingSubmittedForWrongRound)?;
             if let Some(_) = round.get_drawing(&client_id) {
                 error!("Drawing already Exists");
-                return Err(()) //TODO drawing already exist
+                return Err(SubmitDrawingError::DrawingWasAlreadySubmitted)
             }
 
             round.set_drawing(&client_id, Rc::new(drawing));
@@ -283,10 +273,11 @@ impl Game{
         Ok(())
     }
 
-    pub fn submit_vote(&mut self, client_id: &Uuid, votes: HashMap<Uuid, i32>) -> Result<(), ()>{
+    pub fn submit_vote(&mut self, client_id: &Uuid, votes: HashMap<Uuid, i32>)
+    -> Result<(), SubmitVoteError>{
         {
-            let round = self.get_current_round_mut().ok_or(())?;
-            round.submit_vote(&client_id, votes);
+            let round = self.get_current_round_mut().ok_or(SubmitVoteError::GameHasNotStarted)?;
+            round.submit_vote(&client_id, votes)?;
         }
         self.set_player_state(&client_id, PlayerState::VotingDone);
         self.finish_round_if_voting_phase_is_done();

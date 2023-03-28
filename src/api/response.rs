@@ -1,18 +1,18 @@
 use serde::{Deserialize, Serialize};
 use serde::Serializer;
 
-pub trait TMessageName{
+pub trait MessageName{
     fn message_name() -> &'static str;
 }
 
 #[derive(Deserialize, Debug)]
-pub enum GenericResponse<T: TMessageName> {
+pub enum ApiResponse<T: MessageName> {
     Ok(T),
     ClientError(String),
     ServerError(String),
 }
 
-impl<T: TMessageName + Serialize> Serialize for GenericResponse<T>
+impl<T: MessageName + Serialize> Serialize for ApiResponse<T>
  {
 
     fn serialize<S>(&self, serializer: S, ) -> Result<S::Ok, S::Error>
@@ -24,13 +24,13 @@ impl<T: TMessageName + Serialize> Serialize for GenericResponse<T>
 
         state.serialize_field("message_name", T::message_name())?;
         match self{
-            GenericResponse::Ok(x) => {
+            ApiResponse::Ok(x) => {
                 state.serialize_field("success", x)?;
             },
-            GenericResponse::ClientError(v) => {
+            ApiResponse::ClientError(v) => {
                 state.serialize_field("client_error", v)?;
             },
-            GenericResponse::ServerError(v) => {
+            ApiResponse::ServerError(v) => {
                 state.serialize_field("server_error", v)?;
             },
         }

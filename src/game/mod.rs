@@ -11,3 +11,5 @@ pub mod round;
 
 pub mod deck;
 pub mod deck_repository;
+
+pub mod errors;

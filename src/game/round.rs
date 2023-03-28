@@ -3,8 +3,9 @@ use std::{collections::HashMap, rc::Rc, cell::RefCell};
 use log::info;
 use uuid::Uuid;
 
-use super::{drawing::Drawing, deck::Deck, imprint_mapper, player_view::Player};
+use super::{drawing::Drawing, deck::Deck, imprint_mapper, player_view::Player, errors::SubmitVoteError};
 
+const MAX_VOTES_PER_ROUND: i32 = 3;
 
 // TODO: this struct doesn't really make sense
 #[derive(Debug, Clone)]
@@ -65,23 +66,32 @@ impl Round {
 
     pub fn set_drawing(&mut self, client_id: &Uuid, drawing: Rc<Drawing>) {
         info!("set_drawing client_id: {}", client_id);
-        let player_data = self.round_data_per_player.get_mut(client_id).unwrap();
+        let player_data = self.round_data_per_player.get_mut(client_id).expect("Player should exist");
         player_data.drawing = Some(drawing);
     }
 
-    pub fn submit_vote(&mut self, client_id: &Uuid, votes: HashMap<Uuid, i32>) {
-        // TODO: verify that the votes are not greater than the maximum
-        for (id, data) in self.round_data_per_player.iter_mut() {
-            if client_id == id {
-                // TODO: verify that they didn't vote for their own drawing
-                //votes.get(&data.drawing_id)
+    pub fn submit_vote(&mut self, client_id: &Uuid, votes: HashMap<Uuid, i32>)
+    -> Result<(), SubmitVoteError> {
+        if votes.values().sum::<i32>() > MAX_VOTES_PER_ROUND {
+            return Err(SubmitVoteError::MaximumVotesExceeded)
+        }
+        let client_drawing = self.round_data_per_player.get(client_id).expect("player should exist").drawing_id;
+        if let Some(v) = votes.get(&client_drawing) {
+            if *v > 0 {
+                return Err(SubmitVoteError::ClientVotedForSelf)
             }
-            // TODO verify that the votes have all valid drawing ids
+        }
+        let drawing_ids: Vec<_> = self.round_data_per_player.values().map(|v| v.drawing_id).collect();
+        if votes.keys().any(|id| !drawing_ids.contains(id)) {
+            return Err(SubmitVoteError::InvalidDrawingId) // TODO include the drawing id in the error
+        }
+
+        for data in self.round_data_per_player.values_mut() {
             data.votes += votes.get(&data.drawing_id).unwrap();
         }
         let player_data = self.round_data_per_player.get_mut(client_id).unwrap();
-        player_data.has_voted = true
-
+        player_data.has_voted = true;
+        Ok(())
     }
 
     /**

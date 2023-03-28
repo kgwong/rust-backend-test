@@ -49,21 +49,10 @@ impl Handler<ClientRequestWrapper<create_game::Request>> for GameServer {
         msg: ClientRequestWrapper<create_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        let resp = self.gm.create_game(
+        let res = self.gm.create_game(
             Rc::new(msg.client_connection),
             msg.req.host_player_name);
-        match resp {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(
-                        create_game::Response{}
-                    )
-                ),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ServerError("create_game error TODO".to_string())
-                ),
-        }
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -76,14 +65,8 @@ impl Handler<ClientRequestWrapper<join_game::Request>> for GameServer {
         _ctx: &mut Context<Self>)
     -> Self::Result {
         let player_connection = Rc::new(msg.client_connection);
-        match self.gm.join_game(player_connection, &msg.req.room_code, &msg.req.player_name) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(join_game::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.join_game(player_connection, &msg.req.room_code, &msg.req.player_name);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -95,14 +78,8 @@ impl Handler<ClientRequestWrapper<start_game::Request>> for GameServer {
         msg: ClientRequestWrapper<start_game::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.start_game(&msg.client_connection.id) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(start_game::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.start_game(&msg.client_connection.id);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -114,14 +91,8 @@ impl Handler<ClientRequestWrapper<set_player_ready::Request>> for GameServer {
         msg: ClientRequestWrapper<set_player_ready::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.set_player_ready(&msg.client_connection.id, msg.req.ready_state) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(set_player_ready::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.set_player_ready(&msg.client_connection.id, msg.req.ready_state);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -134,14 +105,8 @@ impl Handler<ClientRequestWrapper<submit_drawing::Request>> for GameServer {
         msg: ClientRequestWrapper<submit_drawing::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.submit_drawing(&msg.client_connection.id, msg.req.drawing, msg.req.round) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(submit_drawing::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.submit_drawing(&msg.client_connection.id, msg.req.drawing, msg.req.round);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -153,14 +118,8 @@ impl Handler<ClientRequestWrapper<submit_vote::Request>> for GameServer {
         msg: ClientRequestWrapper<submit_vote::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.vote(&msg.client_connection.id, msg.req.votes) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(submit_vote::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.submit_vote(&msg.client_connection.id, msg.req.votes);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -172,14 +131,8 @@ impl Handler<ClientRequestWrapper<update_game_settings::Request>> for GameServer
         msg: ClientRequestWrapper<update_game_settings::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.update_game_settings(&msg.client_connection.id, &msg.req.game_settings) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(update_game_settings::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.update_game_settings(&msg.client_connection.id, &msg.req.game_settings);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
@@ -191,14 +144,8 @@ impl Handler<ClientRequestWrapper<play_again::Request>> for GameServer {
         msg: ClientRequestWrapper<play_again::Request>,
         _ctx: &mut Context<Self>)
     -> Self::Result {
-        match self.gm.play_again(&msg.client_connection.id) {
-            Ok(_) =>
-                MessageResult(
-                    response::GenericResponse::Ok(play_again::Response{})),
-            Err(_) =>
-                MessageResult(
-                    response::GenericResponse::ClientError("failed".to_string())),
-        }
+        let res = self.gm.play_again(&msg.client_connection.id);
+        MessageResult(response::ApiResponse::from(res))
     }
 }
 
