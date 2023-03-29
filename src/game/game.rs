@@ -212,16 +212,7 @@ impl Game{
         }
         info!("Host is starting the game");
 
-        let decks: Vec<_> = self.settings.drawing_decks_included.iter()
-            .filter(|(_, i)| **i)
-            .map(|(n, _)| {
-                Deck::from(File::open(format!("./decks/{}.json", n)).expect("file")).expect("expect")
-            })
-            .collect();
-        let mut combined_deck = Deck::from_decks(decks);
-        combined_deck.shuffle();
-        combined_deck.add_card("rabbit".to_string());
-        self.drawing_suggestions_deck = Some(combined_deck);
+        self.drawing_suggestions_deck = Some(self.init_deck());
         self.start_next_round();
         Ok(())
     }
@@ -332,6 +323,19 @@ impl Game{
         for player in self.players.values_mut() {
             player.borrow_mut().state = state;
         }
+    }
+
+    fn init_deck(&self) -> Deck<String> {
+        let decks: Vec<_> = self.settings.drawing_decks_included.iter()
+            .filter(|(_, i)| **i)
+            .map(|(n, _)| {
+                Deck::from(File::open(format!("./decks/{}.json", n)).expect("file")).expect("expect")
+            })
+            .collect();
+        let mut combined_deck = Deck::from_decks(decks);
+        combined_deck.add_card("rabbit".to_string());
+        combined_deck.shuffle();
+        combined_deck
     }
 
     fn start_next_round(&mut self) {
