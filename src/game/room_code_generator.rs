@@ -29,6 +29,6 @@ impl RoomCodeGenerator {
 
         self.count += 1;
 
-        return generator.encode_string(self.count as u64);
+        return generator.encode_string(self.count as u64).to_ascii_uppercase();
     }
 }
