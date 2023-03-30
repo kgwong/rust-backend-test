@@ -385,21 +385,22 @@ impl Game{
                 self.set_all_player_states(PlayerState::NotReady);
 
 
-                let best_drawing = self.rounds.iter()
-                    .map(|r| r.get_data())
+                let best_drawing_data = self.rounds.iter()
+                    .map(|r| r.get_data().values())
                     .flatten()
-                    .max_by(|(_, data), (_, data2)| data.votes.cmp(&data2.votes));
-                let s = best_drawing.expect("should have drawings").1;
-                let r = Results {
+                    .filter(|data| data.drawing.is_some())
+                    .max_by(|ldata, rdata| ldata.votes.cmp(&rdata.votes))
+                    .expect("there should be at least one drawing if the voting phase is finishing");
+                let results = Results {
                     message_name: "results".to_string(),
-                    highest_rated_drawing: s.drawing.as_ref().expect("drawing should exist").to_owned().to_vec(),
-                    imprint: s.imprint.as_ref().map(|i| i.as_ref().clone()),
-                    num_votes: s.votes,
-                    drawing_suggestion: s.drawing_suggestion.clone(),
+                    highest_rated_drawing: best_drawing_data.drawing.as_ref().expect("drawing should exist").to_owned().to_vec(),
+                    imprint: best_drawing_data.imprint.as_ref().map(|i| i.as_ref().clone()),
+                    num_votes: best_drawing_data.votes,
+                    drawing_suggestion: best_drawing_data.drawing_suggestion.clone(),
                 };
                 // Important: send scores before sending the results
                 self.broadcast_lobby_update();
-                self.broadcast_results(r);
+                self.broadcast_results(results);
             } else {
                 self.start_next_round();
             }

@@ -8,6 +8,7 @@ static DECKS: &'static[&'static str] = &[
     "occupations",
     "space",
     "transportation",
+    "fruits-and-vegetables",
     "misc",
     ];
 
