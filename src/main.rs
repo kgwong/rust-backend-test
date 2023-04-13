@@ -10,6 +10,8 @@ mod api;
 mod game;
 mod websocket;
 
+const MAX_FRAME_SIZE: usize = 524_287; // 512KB
+
 pub async fn ws_route(
     req: HttpRequest,
     stream: web::Payload,
@@ -22,7 +24,13 @@ pub async fn ws_route(
         server.get_ref().clone(),
         req.peer_addr().expect("oops")
     );
-    let resp = ws::start(session, &req, stream);
+
+    let resp = ws::WsResponseBuilder::new(session, &req, stream)
+        // This will overwrite the codec's max frame-size
+        .frame_size(MAX_FRAME_SIZE)
+        .start();
+
+
     info!("index_resp: {:?}", resp);
     resp
 }
@@ -40,7 +48,7 @@ async fn main() -> std::io::Result<()> {
                 .app_data(web::Data::new(server.clone()))
                 .route("/ws/", web::get().to(ws_route))
         )
-        // TODO: bind via env-var
+        // TODO: bind via env var
         .bind(("127.0.0.1", 8080))?
         .run()
         .await
